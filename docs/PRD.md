@@ -1,11 +1,6 @@
 [PRD.md](https://github.com/user-attachments/files/26762493/PRD.md)
 # 📚 PagePace — Product Requirements Document (PRD)
 
-**Versiyon:** 1.0  
-**Tarih:** 15 Nisan 2026  
-**Yazar:** Future Talent Program — Cohort 2026  
-**Durum:** MVP Tanım Aşaması
-
 ---
 
 ## 1. Ürün Özeti
