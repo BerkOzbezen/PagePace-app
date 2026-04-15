@@ -1,4 +1,4 @@
-[PRD.md](https://github.com/user-attachments/files/26762242/PRD.md)
+[PRD.md](https://github.com/user-attachments/files/26762493/PRD.md)
 # 📚 PagePace — Product Requirements Document (PRD)
 
 **Versiyon:** 1.0  
@@ -377,16 +377,71 @@ Ana Sayfa
 
 ## 12. Ekler
 
-### 12.1 Referans Uygulamalar & Boşluk Analizi
+### 12.1 Rekabet Analizi
 
-| Uygulama | Ne yapıyor | Ne yapmıyor |
-|---|---|---|
-| Goodreads | Kitap listesi, sosyal, öneri | Okuma hızı, zamanlayıcı, tahmin |
-| Storygraph | Gelişmiş istatistik, mood tracking | Okuma hızı tahmini, sosyal karşılaştırma |
-| Bookly | Zamanlayıcı, temel istatistik | Sosyal özellik, tahmin motoru, yetersiz UX |
-| Readng | Zamanlayıcı + basit grafik | Tahmin yok, sosyal yok, son güncelleme 2021 |
+#### Ana Rakipler
 
-**Reading Pace Tracker farkı:** Zamanlayıcı + tahmin motoru + sosyal karşılaştırma kombinasyonunu tek uygulamada sunan **ilk** uygulama.
+**Goodreads** (Amazon · 150M+ kullanıcı)
+
+Sektörün tartışmasız lideri. Devasa kitap veritabanı, sosyal özellikler ve Amazon/Kindle entegrasyonu ile rakipsiz bir kitaplık ve keşif platformu. Ancak Amazon'un 2013'te satın almasının ardından gelişimi durma noktasına geldi — arayüz hâlâ 2011 hissettiriyor, dark mode Mart 2026'da eklendi, "Did Not Finish" rafı yerel özellik olarak yeni geldi. Zamanlayıcı, kişisel hız hesaplama ve bitiş tahmini hiç yok. Öneri motoru okuyucu zevkinden çok Amazon satış önceliklerine göre çalışıyor.
+
+**StoryGraph** (Bağımsız · 5M+ kullanıcı · 2025 Apple App Store Ödülü)
+
+Goodreads'in en güçlü rakibi. Ruh hali takibi, tür analizi, çeyrek yıldız derecelendirme ve yıl sonu raporu ile istatistik odaklı okuyucuların tercihi. Zamanlayıcı yok, sosyal özellikler kasıtlı olarak minimal tutulmuş — yorum yapma Şubat 2026'ya kadar mevcut değildi. Hız tahmini kısmen var ama zamanlayıcı verisine dayanmıyor.
+
+**Bookly** (Cross-platform · 1M+ kullanıcı)
+
+En yakın teknik rakip. Zamanlayıcı, streak, günlük hedef ve görsel istatistikler içeriyor. Motivasyon odaklı tasarımı güçlü. Kritik eksikler: sosyal özellik hiç yok, free versiyonu 10 kitapla sınırlı, bitiş tarihi tahmini yok.
+
+**Bookmory** (Cross-platform · Büyüyen)
+
+Minimalist ve sade deneyim. Sayfa + süre takibi, alıntı kaydetme, journal hissi. Sosyal özellik yok, hız hesaplama yok, hedef odaklı kitleye hitap etmiyor.
+
+**Readng / Leio ve benzerleri** (Küçük ölçekli)
+
+Zamanlayıcı + basit grafik sunan birkaç uygulama var, ancak ya terk edilmiş (son güncelleme 2021) ya çok temel ya da yalnızca iOS. Bu segment fiilen rakipsiz.
+
+---
+
+#### Özellik Karşılaştırma Matrisi
+
+| Özellik | PagePace | Goodreads | StoryGraph | Bookly | Bookmory |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Okuma zamanlayıcısı | ✅ | ❌ | ❌ | ✅ | Kısmi |
+| Kişisel hız hesaplama | ✅ | ❌ | ❌ | Kısmi | ❌ |
+| Bitiş tarihi tahmini | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Streak sistemi | ✅ | ❌ | ❌ | ✅ | ❌ |
+| Arkadaş karşılaştırma | ✅ | Sadece liste | Minimal | ❌ | ❌ |
+| Arkadaşlık isteği sistemi | ✅ | ✅ | Kısmi | ❌ | ❌ |
+| Haftalık istatistik grafikleri | ✅ | ❌ | ✅ | ✅ | Kısmi |
+| Paylaşılabilir istatistik kartı | ✅ | ❌ | ✅ | ❌ | ❌ |
+| Profil gizleme | ✅ | Kısmi | Kısmi | ❌ | ❌ |
+| Türkçe dil desteği | ✅ | ❌ | ❌ | ❌ | ❌ |
+
+---
+
+#### PagePace'i Rakiplerden Ayıran 5 Temel Fark
+
+**1. Zamanlayıcı + Tahmin Motoru birlikte**
+Bookly zamanlayıcı yapıyor ama bitiş tahmini yok. StoryGraph istatistik yapıyor ama zamanlayıcı yok. PagePace, gerçek okuma verisine dayanan bitiş tahmini sunan tek uygulama.
+
+**2. Zamanlayıcılı uygulama + Sosyal karşılaştırma birlikte**
+Bookly'nin sosyal özelliği hiç yok. Goodreads'in zamanlayıcısı yok. "Arkadaşım bu hafta kaç saat okudu, ben kaç saat?" sorusu mevcut uygulamaların hiçbirinde cevaplanamıyor.
+
+**3. Türkçe dil desteği**
+Sektördeki hiçbir rakip Türkçe sunmuyor. Türkiye okuma uygulaması pazarında yerel seçenek boşluğu var — bu TR App Store'da neredeyca rakipsiz başlangıç anlamına geliyor.
+
+**4. Gizlilik odaklı sosyal deneyim**
+Karşılıklı arkadaşlık isteği onayı + Profil Gizle ayarı ile kullanıcı verisinin kimin göreceğini tam kontrol altında tutuyor. Goodreads'in açık ve zayıf modere edilen sosyal yapısına karşı net bir farklılaşma.
+
+**5. Net segment odağı**
+Goodreads herkese hitap ediyor. PagePace'in hedefi kristal net: yılda X kitap hedefi koyan, ilerlemeyi ölçmek isteyen, arkadaşlarıyla rekabet etmekten keyif alan okuyucu. Net segment = net mesaj = daha yüksek dönüşüm oranı.
+
+---
+
+#### Pazar Konumlandırma Özeti
+
+Sektör şu an iki kutba ayrılmış: bir tarafta zamanlayıcı + streak odaklı uygulamalar (Bookly), diğer tarafta istatistik + sosyal uygulamalar (Goodreads, StoryGraph). Bu iki kutbu birleştiren, üstelik Türkçe dil desteği ve gizlilik odaklı sosyal mekanikle gelen bir uygulama henüz yok. PagePace bu boşluğa giriyor.
 
 ### 12.2 Sözlük
 
