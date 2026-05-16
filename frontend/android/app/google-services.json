@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "1021927325395",
+    "project_id": "pagepace-cb8fb",
+    "storage_bucket": "pagepace-cb8fb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1021927325395:android:b3c0d5ec6aab35884f5e26",
+        "android_client_info": {
+          "package_name": "com.pagepace.pagepace"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1021927325395-367j2rf0cpssct9votp9agi5trs2fblp.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBE-G5Ig9PyczSmnsa_MsYOnP75qoX562k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1021927325395-367j2rf0cpssct9votp9agi5trs2fblp.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

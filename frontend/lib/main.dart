@@ -1,7 +1,11 @@
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'core/router/go_router_refresh_stream.dart';
 import 'core/theme/app_colors.dart';
+import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/auth/screens/register_screen.dart';
@@ -14,15 +18,32 @@ import 'features/social/screens/social_screen.dart';
 import 'features/stats/screens/stats_screen.dart';
 import 'features/timer/screens/timer_screen.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
+  static final _authRefresh = GoRouterRefreshStream(
+    FirebaseAuth.instance.authStateChanges(),
+  );
+
   static final GoRouter _router = GoRouter(
     initialLocation: '/login',
+    refreshListenable: _authRefresh,
+    redirect: (context, state) async {
+      final user = FirebaseAuth.instance.currentUser;
+      final isAuthRoute = state.matchedLocation == '/login' ||
+          state.matchedLocation == '/register';
+      if (user == null && !isAuthRoute) return '/login';
+      if (user != null && isAuthRoute) return '/books';
+      return null;
+    },
     routes: [
       GoRoute(
         path: '/login',

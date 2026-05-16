@@ -3,9 +3,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/utils/book_mapper.dart';
 import '../../../shared/widgets/pp_button.dart';
 import '../../../shared/widgets/pp_card.dart';
-import 'books_screen.dart';
 
 class BookDetailScreen extends StatelessWidget {
   const BookDetailScreen({super.key, required this.bookId});
@@ -15,18 +15,13 @@ class BookDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final book = mockBooks.cast<Map<String, Object?>>().firstWhere(
-          (b) => b['id'] == bookId,
-          orElse: () => const {},
-        );
+    final coverColor = Color(coverColorFromId(bookId));
 
-    final title = (book['title'] as String?) ?? 'Bilinmeyen Kitap';
-    final author = (book['author'] as String?) ?? '';
-    final totalPages = (book['totalPages'] as int?) ?? 0;
-    final currentPage = (book['currentPage'] as int?) ?? 0;
-    final coverColor = Color(((book['coverColor'] as int?) ?? 0xFF6C63FF));
-    final progress = totalPages <= 0 ? 0.0 : (currentPage / totalPages).clamp(0.0, 1.0);
-    final percent = (progress * 100).round();
+    const title = 'Kitap Detay';
+    const totalPages = 0;
+    const currentPage = 0;
+    const progress = 0.0;
+    const percent = 0;
 
     final sessions = const [
       {'date': '05 May 2026', 'duration': '25 dk', 'range': '160 → 180'},
@@ -58,7 +53,7 @@ class BookDetailScreen extends StatelessWidget {
           const SizedBox(height: 14),
           Text(title, style: AppTextStyles.h2.copyWith(color: scheme.onSurface)),
           const SizedBox(height: 4),
-          Text(author, style: AppTextStyles.body.copyWith(color: AppColors.textSecondary)),
+          Text('Kitap #$bookId', style: AppTextStyles.body.copyWith(color: AppColors.textSecondary)),
           const SizedBox(height: 16),
           PPCard(
             child: Column(
@@ -125,4 +120,3 @@ class BookDetailScreen extends StatelessWidget {
     );
   }
 }
-

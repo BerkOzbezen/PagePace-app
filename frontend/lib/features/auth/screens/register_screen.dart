@@ -1,7 +1,8 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/theme/app_colors.dart';
+import '../../../core/services/auth_service.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/pp_button.dart';
 import '../../../shared/widgets/pp_card.dart';
@@ -15,6 +16,7 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
+  final _authService = AuthService();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -22,6 +24,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   bool _p1Hidden = true;
   bool _p2Hidden = true;
+  bool _loading = false;
 
   String? _nameError;
   String? _emailError;
@@ -37,7 +40,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  void _mockRegister() {
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  Future<void> _register() async {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
     final p1 = _passwordController.text;
@@ -54,9 +64,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
               : null;
     });
 
-    if (_nameError != null || _emailError != null || _passwordError != null || _password2Error != null) return;
+    if (_nameError != null || _emailError != null || _passwordError != null || _password2Error != null) {
+      return;
+    }
 
-    context.go('/books');
+    setState(() => _loading = true);
+    try {
+      final credential = await _authService.register(email, p1);
+      if (name.isNotEmpty) {
+        await credential.user?.updateDisplayName(name);
+      }
+      await credential.user?.reload();
+      debugPrint('Register complete, current user: ${credential.user?.email}');
+      if (!mounted) return;
+      context.go('/books');
+    } on FirebaseAuthException catch (e) {
+      _showError(_authService.firebaseErrorMessage(e));
+    } catch (_) {
+      _showError('Kayıt oluşturulamadı');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override
@@ -67,7 +95,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       appBar: AppBar(
         leading: IconButton(
           tooltip: 'Geri',
-          onPressed: () => context.pop(),
+          onPressed: _loading ? null : () => context.pop(),
           icon: const Icon(Icons.arrow_back),
         ),
         title: const Text(''),
@@ -139,9 +167,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                       const SizedBox(height: 12),
                       PPButton(
-                        label: 'Kayıt Ol',
+                        label: _loading ? 'Kayıt oluşturuluyor...' : 'Kayıt Ol',
                         fullWidth: true,
-                        onPressed: _mockRegister,
+                        onPressed: _loading ? null : _register,
                       ),
                       const SizedBox(height: 8),
                       Row(
@@ -149,16 +177,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         children: [
                           Text('Zaten hesabın var mı? ', style: AppTextStyles.bodySmall.copyWith(color: scheme.onSurface.withValues(alpha: 0.75))),
                           TextButton(
-                            onPressed: () => context.go('/login'),
+                            onPressed: _loading ? null : () => context.go('/login'),
                             child: Text('Giriş Yap', style: AppTextStyles.bodySmall.copyWith(color: scheme.primary, fontWeight: FontWeight.w600)),
                           ),
                         ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Mock kayıt: Form doluysa /books’a yönlenir.',
-                        style: AppTextStyles.caption.copyWith(color: AppColors.textTertiary),
-                        textAlign: TextAlign.center,
                       ),
                     ],
                   ),
@@ -171,4 +193,3 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 }
-

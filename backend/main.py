@@ -1,19 +1,39 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+from app.api.v1.router import api_router
+from app.core.firebase import init_firebase
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    import app.core.firebase as firebase_module
+
+    client = init_firebase()
+    firebase_module.db = client
+    app.state.db = client
+    yield
+
 
 app = FastAPI(
     title="PagePace API",
     description="Your reading, your pace. — Backend API",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(api_router)
+
 
 @app.get("/health", tags=["system"])
 async def health_check():

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/exceptions/api_exceptions.dart';
+import '../../../core/services/api_service.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/pp_button.dart';
 import '../../../shared/widgets/pp_card.dart';
@@ -14,15 +16,17 @@ class AddBookScreen extends StatefulWidget {
 }
 
 class _AddBookScreenState extends State<AddBookScreen> {
+  final _api = ApiService();
   final _isbnController = TextEditingController();
   final _titleController = TextEditingController();
   final _authorController = TextEditingController();
   final _totalPagesController = TextEditingController();
 
   int _selectedCoverColor = 0xFF6C63FF;
+  bool _saving = false;
+  bool _searching = false;
 
   String? _titleError;
-  String? _authorError;
   String? _pagesError;
 
   final _colors = const [
@@ -43,38 +47,77 @@ class _AddBookScreenState extends State<AddBookScreen> {
     super.dispose();
   }
 
-  void _mockAutofill() {
-    setState(() {
-      _titleController.text = 'Dune';
-      _authorController.text = 'Frank Herbert';
-      _totalPagesController.text = '412';
-      _selectedCoverColor = 0xFF6C63FF;
-      _titleError = null;
-      _authorError = null;
-      _pagesError = null;
-    });
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
-  void _save() {
+  Future<void> _autofillFromIsbn() async {
+    final isbn = _isbnController.text.trim();
+    if (isbn.isEmpty) {
+      _showError('ISBN girin');
+      return;
+    }
+
+    setState(() => _searching = true);
+    try {
+      final result = await _api.searchBookByIsbn(isbn);
+      if (!mounted) return;
+      setState(() {
+        _titleController.text = result['title'] as String? ?? '';
+        final pages = result['total_pages'];
+        if (pages is int && pages > 0) {
+          _totalPagesController.text = pages.toString();
+        }
+        _titleError = null;
+        _pagesError = null;
+      });
+    } on ApiException catch (e) {
+      _showError(e.message);
+    } catch (_) {
+      _showError('Kitap bilgisi alınamadı');
+    } finally {
+      if (mounted) setState(() => _searching = false);
+    }
+  }
+
+  Future<void> _save() async {
     final title = _titleController.text.trim();
-    final author = _authorController.text.trim();
     final pagesText = _totalPagesController.text.trim();
     final pages = int.tryParse(pagesText);
+    final isbn = _isbnController.text.trim();
 
     setState(() {
       _titleError = title.isEmpty ? 'Kitap adı zorunlu' : null;
-      _authorError = author.isEmpty ? 'Yazar zorunlu' : null;
       _pagesError = (pages == null || pages <= 0) ? 'Toplam sayfa geçersiz' : null;
     });
 
-    if (_titleError != null || _authorError != null || _pagesError != null) return;
+    if (_titleError != null || _pagesError != null) return;
 
-    context.go('/books');
+    setState(() => _saving = true);
+    try {
+      await _api.createBook(
+        title: title,
+        totalPages: pages!,
+        isbn: isbn.isEmpty ? null : isbn,
+      );
+      if (!mounted) return;
+      context.go('/books');
+    } on ApiException catch (e) {
+      _showError(e.message);
+    } catch (_) {
+      _showError('Kitap kaydedilemedi');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final busy = _saving || _searching;
 
     return Scaffold(
       appBar: AppBar(
@@ -82,7 +125,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
         automaticallyImplyLeading: true,
         leading: IconButton(
           tooltip: 'Geri',
-          onPressed: () => context.pop(),
+          onPressed: busy ? null : () => context.pop(),
           icon: const Icon(Icons.arrow_back),
         ),
       ),
@@ -103,10 +146,10 @@ class _AddBookScreenState extends State<AddBookScreen> {
                 ),
                 const SizedBox(height: 10),
                 PPButton(
-                  label: 'Otomatik Doldur',
+                  label: _searching ? 'Aranıyor...' : 'Otomatik Doldur',
                   fullWidth: true,
                   variant: PPButtonVariant.secondary,
-                  onPressed: _mockAutofill,
+                  onPressed: busy ? null : _autofillFromIsbn,
                 ),
                 const SizedBox(height: 14),
                 PPTextField(
@@ -122,9 +165,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
                   label: 'Yazar',
                   controller: _authorController,
                   textInputAction: TextInputAction.next,
-                  errorText: _authorError,
                   prefixIcon: Icons.person_outline,
-                  onChanged: (_) => setState(() => _authorError = null),
                 ),
                 const SizedBox(height: 12),
                 PPTextField(
@@ -146,7 +187,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
                     final selected = c == _selectedCoverColor;
                     return InkWell(
                       borderRadius: BorderRadius.circular(999),
-                      onTap: () => setState(() => _selectedCoverColor = c),
+                      onTap: busy ? null : () => setState(() => _selectedCoverColor = c),
                       child: Container(
                         width: 38,
                         height: 38,
@@ -161,22 +202,15 @@ class _AddBookScreenState extends State<AddBookScreen> {
                 ),
                 const SizedBox(height: 16),
                 PPButton(
-                  label: 'Kaydet',
+                  label: _saving ? 'Kaydediliyor...' : 'Kaydet',
                   fullWidth: true,
-                  onPressed: _save,
+                  onPressed: busy ? null : _save,
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Mock kayıt: Kaydet’e basınca /books’a döner.',
-            style: AppTextStyles.caption.copyWith(color: scheme.onSurface.withValues(alpha: 0.6)),
-            textAlign: TextAlign.center,
           ),
         ],
       ),
     );
   }
 }
-

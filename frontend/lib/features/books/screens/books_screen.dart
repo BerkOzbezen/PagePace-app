@@ -1,61 +1,82 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/services/api_service.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/utils/book_mapper.dart';
 import '../../../shared/widgets/pp_button.dart';
 import '../../../shared/widgets/pp_card.dart';
 import '../widgets/book_list_item.dart';
 
-final mockBooks = [
-  {
-    'id': '1',
-    'title': 'Dune',
-    'author': 'Frank Herbert',
-    'totalPages': 412,
-    'currentPage': 180,
-    'status': 'reading',
-    'coverColor': 0xFF6C63FF,
-  },
-  {
-    'id': '2',
-    'title': 'Atomik Alışkanlıklar',
-    'author': 'James Clear',
-    'totalPages': 320,
-    'currentPage': 320,
-    'status': 'completed',
-    'coverColor': 0xFF22C55E,
-  },
-  {
-    'id': '3',
-    'title': 'Sapiens',
-    'author': 'Yuval Noah Harari',
-    'totalPages': 510,
-    'currentPage': 0,
-    'status': 'wishlist',
-    'coverColor': 0xFFF59E0B,
-  },
-  {
-    'id': '4',
-    'title': 'Savaş ve Barış',
-    'author': 'Lev Tolstoy',
-    'totalPages': 1392,
-    'currentPage': 240,
-    'status': 'reading',
-    'coverColor': 0xFFEF4444,
-  },
-];
-
-class BooksScreen extends StatelessWidget {
+class BooksScreen extends StatefulWidget {
   const BooksScreen({super.key});
+
+  @override
+  State<BooksScreen> createState() => _BooksScreenState();
+}
+
+class _BooksScreenState extends State<BooksScreen> {
+  final _api = ApiService();
+
+  bool _loading = true;
+  bool _loadFailed = false;
+  List<Map<String, Object?>> _books = [];
+
+  @override
+  void initState() {
+    super.initState();
+    debugPrint('Books screen loaded');
+    debugPrint('Current user: ${FirebaseAuth.instance.currentUser?.email}');
+    _loadBooks();
+  }
+
+  Future<void> _loadBooks() async {
+    setState(() {
+      _loading = true;
+      _loadFailed = false;
+    });
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        debugPrint('Books load aborted: no authenticated user');
+        if (!mounted) return;
+        setState(() {
+          _books = [];
+          _loading = false;
+          _loadFailed = true;
+        });
+        return;
+      }
+
+      await user.getIdToken(true);
+      final raw = await _api.getBooks();
+      final books = raw.map(bookFromApi).toList(growable: false);
+      if (!mounted) return;
+      setState(() {
+        _books = books;
+        _loading = false;
+      });
+    } catch (e, stackTrace) {
+      debugPrint('Failed to load books: $e');
+      debugPrint('$stackTrace');
+      if (!mounted) return;
+      setState(() {
+        _books = [];
+        _loading = false;
+        _loadFailed = true;
+      });
+    }
+  }
+
+  List<Map<String, Object?>> _filtered(String status) => _books
+      .where((b) => b['status'] == status)
+      .toList(growable: false);
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-
-    List<Map<String, Object?>> filtered(String status) => mockBooks
-        .cast<Map<String, Object?>>()
-        .where((b) => b['status'] == status)
-        .toList(growable: false);
 
     return Scaffold(
       appBar: AppBar(
@@ -72,42 +93,54 @@ class BooksScreen extends StatelessWidget {
           const SizedBox(width: 6),
         ],
       ),
-      body: DefaultTabController(
-        length: 3,
-        child: Column(
-          children: [
-            TabBar(
-              dividerColor: scheme.outline.withValues(alpha: 0.7),
-              labelStyle: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600),
-              tabs: const [
-                Tab(text: 'Okuyor'),
-                Tab(text: 'Tamamlandı'),
-                Tab(text: 'Liste'),
-              ],
-            ),
-            Expanded(
-              child: TabBarView(
-                children: [
-                  _BooksTab(
-                    books: filtered('reading'),
-                    emptyLabel: 'Henüz kitap yok',
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _loadFailed
+              ? Center(
+                  child: Text(
+                    'Yüklenemedi',
+                    style: AppTextStyles.h3.copyWith(color: scheme.onSurface),
                   ),
-                  _BooksTab(
-                    books: filtered('completed'),
-                    emptyLabel: 'Henüz kitap yok',
+                )
+              : DefaultTabController(
+                  length: 3,
+                  child: Column(
+                    children: [
+                      TabBar(
+                        dividerColor: scheme.outline.withValues(alpha: 0.7),
+                        labelStyle: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600),
+                        tabs: const [
+                          Tab(text: 'Okuyor'),
+                          Tab(text: 'Tamamlandı'),
+                          Tab(text: 'Liste'),
+                        ],
+                      ),
+                      Expanded(
+                        child: TabBarView(
+                          children: [
+                            _BooksTab(
+                              books: _filtered('reading'),
+                              emptyLabel: 'Henüz kitap yok',
+                            ),
+                            _BooksTab(
+                              books: _filtered('completed'),
+                              emptyLabel: 'Henüz kitap yok',
+                            ),
+                            _BooksTab(
+                              books: _filtered('wishlist'),
+                              emptyLabel: 'Henüz kitap yok',
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  _BooksTab(
-                    books: filtered('wishlist'),
-                    emptyLabel: 'Henüz kitap yok',
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+                ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => context.go('/books/add'),
+        onPressed: () async {
+          await context.push('/books/add');
+          if (mounted) _loadBooks();
+        },
         child: const Icon(Icons.add),
       ),
     );
@@ -178,4 +211,3 @@ class _BooksTab extends StatelessWidget {
     );
   }
 }
-

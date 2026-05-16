@@ -1,6 +1,8 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/services/auth_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/pp_button.dart';
@@ -15,10 +17,12 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final _authService = AuthService();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
   bool _passwordHidden = true;
+  bool _loading = false;
   String? _emailError;
   String? _passwordError;
 
@@ -29,7 +33,14 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _mockLogin() {
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  Future<void> _signIn() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
 
@@ -40,7 +51,36 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (_emailError != null || _passwordError != null) return;
 
-    context.go('/books');
+    setState(() => _loading = true);
+    try {
+      await _authService.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      if (!mounted) return;
+      context.go('/books');
+    } on FirebaseAuthException catch (e) {
+      _showError(_authService.firebaseErrorMessage(e));
+    } catch (_) {
+      _showError('Giriş yapılamadı');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    setState(() => _loading = true);
+    try {
+      await _authService.signInWithGoogle();
+      if (!mounted) return;
+      context.go('/books');
+    } on FirebaseAuthException catch (e) {
+      _showError(_authService.firebaseErrorMessage(e));
+    } catch (_) {
+      _showError('Google ile giriş yapılamadı');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override
@@ -79,7 +119,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         variant: PPButtonVariant.secondary,
                         fullWidth: true,
                         leading: const Icon(Icons.g_mobiledata),
-                        onPressed: () => context.go('/books'),
+                        onPressed: _loading ? null : _signInWithGoogle,
                       ),
                       const SizedBox(height: 12),
                       Row(
@@ -120,9 +160,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 12),
                       PPButton(
-                        label: 'Giriş Yap',
+                        label: _loading ? 'Giriş yapılıyor...' : 'Giriş Yap',
                         fullWidth: true,
-                        onPressed: _mockLogin,
+                        onPressed: _loading ? null : _signIn,
                       ),
                       const SizedBox(height: 8),
                       Row(
@@ -130,7 +170,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         children: [
                           Text('Hesabın yok mu? ', style: AppTextStyles.bodySmall.copyWith(color: scheme.onSurface.withValues(alpha: 0.75))),
                           TextButton(
-                            onPressed: () => context.go('/register'),
+                            onPressed: _loading ? null : () => context.go('/register'),
                             child: Text('Kayıt Ol', style: AppTextStyles.bodySmall.copyWith(color: scheme.primary, fontWeight: FontWeight.w600)),
                           ),
                         ],
@@ -146,4 +186,3 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
-
