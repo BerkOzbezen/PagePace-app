@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -103,6 +104,8 @@ class _AddBookScreenState extends State<AddBookScreen> {
         totalPages: pages!,
         isbn: isbn.isEmpty ? null : isbn,
       );
+      if (!mounted) return;
+      await FirebaseAuth.instance.currentUser?.getIdToken(true);
       if (!mounted) return;
       context.go('/books');
     } on ApiException catch (e) {

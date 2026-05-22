@@ -11,8 +11,8 @@ class ApiService {
             Dio(
               BaseOptions(
                 baseUrl: baseUrl,
-                connectTimeout: const Duration(seconds: 15),
-                receiveTimeout: const Duration(seconds: 15),
+                connectTimeout: const Duration(seconds: 30),
+                receiveTimeout: const Duration(seconds: 30),
                 headers: {'Content-Type': 'application/json'},
               ),
             ) {
@@ -24,7 +24,7 @@ class ApiService {
     );
   }
 
-  static const String baseUrl = 'http://localhost:8000';
+  static const String baseUrl = 'http://192.168.1.236:8000';
 
   final Dio _dio;
   final FirebaseAuth _auth;
@@ -35,7 +35,7 @@ class ApiService {
   ) async {
     final user = _auth.currentUser;
     if (user != null) {
-      final token = await user.getIdToken();
+      final token = await user.getIdToken(true);
       if (token != null) {
         options.headers['Authorization'] = 'Bearer $token';
         debugPrint('API auth: token attached for ${user.email}');
