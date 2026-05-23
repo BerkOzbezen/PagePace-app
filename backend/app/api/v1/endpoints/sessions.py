@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from google.cloud import firestore
 from pydantic import BaseModel, Field, model_validator
 
-from app.core.firebase import get_db, get_current_user
+from app.core.deps import get_uid
+from app.core.firebase import db
 from app.core.utils import doc_to_dict, session_to_api, to_datetime, utc_now
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -42,9 +43,8 @@ def _ensure_book_exists(db: firestore.Client, uid: str, book_id: str) -> None:
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_session(
     body: SessionCreate,
-    uid: Annotated[str, Depends(get_current_user)],
+    uid: Annotated[str, Depends(get_uid)],
 ):
-    db = get_db()
     _ensure_book_exists(db, uid, body.book_id)
 
     payload: dict[str, Any] = {
@@ -73,10 +73,9 @@ async def create_session(
 
 @router.get("")
 async def list_sessions(
-    uid: Annotated[str, Depends(get_current_user)],
+    uid: Annotated[str, Depends(get_uid)],
     book_id: str = Query(..., min_length=1),
 ):
-    db = get_db()
     _ensure_book_exists(db, uid, book_id)
 
     sessions = [
@@ -93,10 +92,9 @@ async def list_sessions(
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_session(
     session_id: str,
-    uid: Annotated[str, Depends(get_current_user)],
+    uid: Annotated[str, Depends(get_uid)],
     book_id: str = Query(..., min_length=1),
 ):
-    db = get_db()
     _ensure_book_exists(db, uid, book_id)
     ref = _sessions_ref(db, uid, book_id).document(session_id)
     if not ref.get().exists:

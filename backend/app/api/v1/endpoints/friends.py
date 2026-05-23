@@ -3,7 +3,8 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.core.firebase import get_db, get_current_user
+from app.core.deps import get_uid
+from app.core.firebase import db
 from app.core.utils import doc_to_dict, utc_now
 from app.services.stats_service import (
     fetch_all_sessions,
@@ -52,7 +53,7 @@ def _friend_uid_from(friendship: dict[str, Any], uid: str) -> str:
 @router.post("/request", status_code=status.HTTP_201_CREATED)
 async def send_friend_request(
     body: FriendRequestCreate,
-    uid: Annotated[str, Depends(get_current_user)],
+    uid: Annotated[str, Depends(get_uid)],
 ):
     if body.to_user_id == uid:
         raise HTTPException(
@@ -60,7 +61,6 @@ async def send_friend_request(
             detail="Kendinize arkadaşlık isteği gönderemezsiniz",
         )
 
-    db = get_db()
     target = db.collection("users").document(body.to_user_id).get()
     if not target.exists:
         raise HTTPException(
@@ -95,9 +95,8 @@ async def send_friend_request(
 async def respond_friend_request(
     friendship_id: str,
     body: FriendRequestAction,
-    uid: Annotated[str, Depends(get_current_user)],
+    uid: Annotated[str, Depends(get_uid)],
 ):
-    db = get_db()
     ref = _friendships_ref(db).document(friendship_id)
     doc = ref.get()
     if not doc.exists:
@@ -123,8 +122,7 @@ async def respond_friend_request(
 
 
 @router.get("")
-async def list_friends(uid: Annotated[str, Depends(get_current_user)]):
-    db = get_db()
+async def list_friends(uid: Annotated[str, Depends(get_uid)]):
     friends: list[dict[str, Any]] = []
 
     for doc in _friendships_ref(db).stream():
@@ -152,9 +150,8 @@ async def list_friends(uid: Annotated[str, Depends(get_current_user)]):
 @router.delete("/{friendship_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_friend(
     friendship_id: str,
-    uid: Annotated[str, Depends(get_current_user)],
+    uid: Annotated[str, Depends(get_uid)],
 ):
-    db = get_db()
     ref = _friendships_ref(db).document(friendship_id)
     doc = ref.get()
     if not doc.exists:
@@ -174,9 +171,8 @@ async def remove_friend(
 @router.get("/{friend_uid}/stats")
 async def get_friend_stats(
     friend_uid: str,
-    uid: Annotated[str, Depends(get_current_user)],
+    uid: Annotated[str, Depends(get_uid)],
 ):
-    db = get_db()
     friendship = _active_friendship(db, uid, friend_uid)
     if not friendship:
         raise HTTPException(

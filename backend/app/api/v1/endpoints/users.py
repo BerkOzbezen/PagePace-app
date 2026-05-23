@@ -3,7 +3,8 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
-from app.core.firebase import get_db, get_current_user
+from app.core.deps import get_uid
+from app.core.firebase import db
 from app.core.utils import doc_to_dict, user_to_api, utc_now
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -29,17 +30,15 @@ def _get_user_or_404(db, uid: str) -> dict[str, Any]:
 
 
 @router.get("/me")
-async def get_me(uid: Annotated[str, Depends(get_current_user)]):
-    db = get_db()
+async def get_me(uid: Annotated[str, Depends(get_uid)]):
     return user_to_api(_get_user_or_404(db, uid))
 
 
 @router.get("/search")
 async def search_users(
-    uid: Annotated[str, Depends(get_current_user)],
+    uid: Annotated[str, Depends(get_uid)],
     username: str = Query(..., min_length=1),
 ):
-    db = get_db()
     query = (
         db.collection("users")
         .where("displayName", ">=", username)
@@ -70,9 +69,8 @@ async def search_users(
 @router.put("/privacy")
 async def update_privacy(
     body: PrivacyUpdate,
-    uid: Annotated[str, Depends(get_current_user)],
+    uid: Annotated[str, Depends(get_uid)],
 ):
-    db = get_db()
     ref = _user_ref(db, uid)
     if not ref.get().exists:
         ref.set(

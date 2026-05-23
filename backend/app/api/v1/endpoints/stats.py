@@ -2,7 +2,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
-from app.core.firebase import get_db, get_current_user
+from app.core.deps import get_uid
+from app.core.firebase import db
 from app.core.utils import doc_to_dict
 from app.services.stats_service import (
     fetch_all_sessions,
@@ -22,36 +23,31 @@ def _fetch_books(db, uid: str) -> list[dict]:
 
 
 @router.get("/weekly")
-async def get_weekly_stats(uid: Annotated[str, Depends(get_current_user)]):
-    db = get_db()
+async def get_weekly_stats(uid: Annotated[str, Depends(get_uid)]):
     sessions = fetch_all_sessions(db, uid)
     return weekly_stats(sessions)
 
 
 @router.get("/monthly")
-async def get_monthly_stats(uid: Annotated[str, Depends(get_current_user)]):
-    db = get_db()
+async def get_monthly_stats(uid: Annotated[str, Depends(get_uid)]):
     sessions = fetch_all_sessions(db, uid)
     return monthly_stats(sessions)
 
 
 @router.get("/yearly")
-async def get_yearly_stats(uid: Annotated[str, Depends(get_current_user)]):
-    db = get_db()
+async def get_yearly_stats(uid: Annotated[str, Depends(get_uid)]):
     sessions = fetch_all_sessions(db, uid)
     books = _fetch_books(db, uid)
     return yearly_stats(sessions, books)
 
 
 @router.get("/streak")
-async def get_streak_stats(uid: Annotated[str, Depends(get_current_user)]):
-    db = get_db()
+async def get_streak_stats(uid: Annotated[str, Depends(get_uid)]):
     sessions = fetch_all_sessions(db, uid)
     return streak_stats(sessions)
 
 
 @router.get("/heatmap")
-async def get_heatmap_stats(uid: Annotated[str, Depends(get_current_user)]):
-    db = get_db()
+async def get_heatmap_stats(uid: Annotated[str, Depends(get_uid)]):
     sessions = fetch_all_sessions(db, uid)
     return heatmap_stats(sessions)

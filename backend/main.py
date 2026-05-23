@@ -4,16 +4,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
-from app.core.firebase import init_firebase
+from app.core.firebase import db
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    import app.core.firebase as firebase_module
-
-    client = init_firebase()
-    firebase_module.db = client
-    app.state.db = client
+    app.state.db = db
     yield
 
 

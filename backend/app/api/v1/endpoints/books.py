@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from google.cloud import firestore
 from pydantic import BaseModel, Field
 
-from app.core.firebase import get_db, get_current_user
+from app.core.deps import get_uid
+from app.core.firebase import db
 from app.core.utils import book_to_api, doc_to_dict, to_datetime, utc_now
 from app.services.pace_service import build_pace_response
 
@@ -43,8 +44,7 @@ def _get_book_or_404(db: firestore.Client, uid: str, book_id: str) -> dict[str, 
 
 
 @router.get("")
-async def list_books(uid: Annotated[str, Depends(get_current_user)]):
-    db = get_db()
+async def list_books(uid: Annotated[str, Depends(get_uid)]):
     books = [
         book_to_api(doc_to_dict(doc))
         for doc in _books_ref(db, uid).stream()
@@ -55,9 +55,8 @@ async def list_books(uid: Annotated[str, Depends(get_current_user)]):
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_book(
     body: BookCreate,
-    uid: Annotated[str, Depends(get_current_user)],
+    uid: Annotated[str, Depends(get_uid)],
 ):
-    db = get_db()
     now = utc_now()
     payload: dict[str, Any] = {
         "title": body.title,
@@ -77,7 +76,7 @@ async def create_book(
 
 @router.get("/search")
 async def search_books_by_isbn(
-    uid: Annotated[str, Depends(get_current_user)],
+    uid: Annotated[str, Depends(get_uid)],
     isbn: str = Query(..., min_length=1),
 ):
     _ = uid
@@ -109,18 +108,16 @@ async def search_books_by_isbn(
 @router.get("/{book_id}")
 async def get_book(
     book_id: str,
-    uid: Annotated[str, Depends(get_current_user)],
+    uid: Annotated[str, Depends(get_uid)],
 ):
-    db = get_db()
     return book_to_api(_get_book_or_404(db, uid, book_id))
 
 
 @router.get("/{book_id}/pace")
 async def get_book_pace(
     book_id: str,
-    uid: Annotated[str, Depends(get_current_user)],
+    uid: Annotated[str, Depends(get_uid)],
 ):
-    db = get_db()
     book = _get_book_or_404(db, uid, book_id)
 
     sessions_ref = (
@@ -148,9 +145,8 @@ async def get_book_pace(
 async def update_book(
     book_id: str,
     body: BookUpdate,
-    uid: Annotated[str, Depends(get_current_user)],
+    uid: Annotated[str, Depends(get_uid)],
 ):
-    db = get_db()
     ref = _books_ref(db, uid).document(book_id)
     if not ref.get().exists:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kitap bulunamadı")
@@ -183,9 +179,8 @@ async def update_book(
 @router.delete("/{book_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_book(
     book_id: str,
-    uid: Annotated[str, Depends(get_current_user)],
+    uid: Annotated[str, Depends(get_uid)],
 ):
-    db = get_db()
     ref = _books_ref(db, uid).document(book_id)
     if not ref.get().exists:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kitap bulunamadı")
