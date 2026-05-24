@@ -37,6 +37,7 @@ class MyApp extends StatelessWidget {
     initialLocation: '/login',
     refreshListenable: _authRefresh,
     redirect: (context, state) async {
+      await FirebaseAuth.instance.currentUser?.getIdToken(true);
       final user = FirebaseAuth.instance.currentUser;
       final isAuthRoute = state.matchedLocation == '/login' ||
           state.matchedLocation == '/register';

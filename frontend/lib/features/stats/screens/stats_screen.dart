@@ -1,54 +1,177 @@
 import 'dart:math';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/services/api_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/pp_card.dart';
 
-class StatsScreen extends StatelessWidget {
+class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
+
+  @override
+  State<StatsScreen> createState() => _StatsScreenState();
+}
+
+class _StatsScreenState extends State<StatsScreen> {
+  final _api = ApiService();
+
+  List<Map<String, dynamic>> _weekly = [];
+  Map<String, dynamic>? _yearly;
+  Map<String, dynamic>? _streak;
+  Map<String, dynamic>? _heatmap;
+  bool _loading = true;
+
+  static const _dayLabels = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStats();
+  }
+
+  Future<void> _loadStats() async {
+    try {
+      await FirebaseAuth.instance.currentUser?.getIdToken(true);
+
+      final weekly = await _api.getWeeklyStats();
+      final yearly = await _api.getYearlyStats();
+      final streak = await _api.getStreakStats();
+      final heatmap = await _api.getHeatmap();
+
+      if (!mounted) return;
+      setState(() {
+        _weekly = weekly;
+        _yearly = yearly;
+        _streak = streak;
+        _heatmap = heatmap;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+  }
+
+  int _readInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return 0;
+  }
+
+  double _readDouble(dynamic value) {
+    if (value is double) return value;
+    if (value is num) return value.toDouble();
+    return 0;
+  }
+
+  String _formatInt(num value) => value.round().toString();
+
+  String _dayLabel(String isoDate) {
+    try {
+      final date = DateTime.parse(isoDate);
+      return _dayLabels[date.weekday - 1];
+    } catch (_) {
+      return '';
+    }
+  }
+
+  List<bool> _buildStreakDays(int currentStreak, String? lastReadDate) {
+    final days = List.filled(28, false);
+    if (currentStreak <= 0 || lastReadDate == null) return days;
+
+    DateTime streakEnd;
+    try {
+      streakEnd = DateTime.parse(lastReadDate);
+    } catch (_) {
+      return days;
+    }
+
+    final streakStart = DateTime(streakEnd.year, streakEnd.month, streakEnd.day)
+        .subtract(Duration(days: currentStreak - 1));
+    final today = DateTime.now();
+    final gridStart = DateTime(today.year, today.month, today.day)
+        .subtract(const Duration(days: 27));
+
+    for (var i = 0; i < 28; i++) {
+      final day = gridStart.add(Duration(days: i));
+      final dayOnly = DateTime(day.year, day.month, day.day);
+      if (!dayOnly.isBefore(streakStart) && !dayOnly.isAfter(DateTime(
+            streakEnd.year,
+            streakEnd.month,
+            streakEnd.day,
+          ))) {
+        days[i] = true;
+      }
+    }
+    return days;
+  }
+
+  bool get _hasAnyData {
+    final weeklyMinutes = _weekly.any((d) => _readDouble(d['total_minutes']) > 0);
+    final yearlyPages = _readInt(_yearly?['total_pages']) > 0;
+    final currentStreak = _readInt(_streak?['current_streak']) > 0;
+    final heatmapTotal = (_readInt(_heatmap?['morning']) +
+            _readInt(_heatmap?['afternoon']) +
+            _readInt(_heatmap?['evening']) +
+            _readInt(_heatmap?['night'])) >
+        0;
+    return weeklyMinutes || yearlyPages || currentStreak || heatmapTotal;
+  }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = scheme.brightness == Brightness.dark;
+    final emptyDot = isDark ? AppColors.cardBorderDark : AppColors.cardBorderLight;
 
-    final weeklyData = const [
-      {'day': 'Pzt', 'minutes': 45},
-      {'day': 'Sal', 'minutes': 20},
-      {'day': 'Çar', 'minutes': 60},
-      {'day': 'Per', 'minutes': 0},
-      {'day': 'Cum', 'minutes': 35},
-      {'day': 'Cmt', 'minutes': 80},
-      {'day': 'Paz', 'minutes': 25},
-    ];
+    if (_loading) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('İstatistikler')),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
 
-    final yearlyStats = const {
-      'totalBooks': 7,
-      'totalPages': 2340,
-      'totalHours': 54,
-      'longestStreak': 23,
+    final totalBooks = _readInt(_yearly?['total_books']);
+    final totalPages = _readInt(_yearly?['total_pages']);
+    final totalHours = _readDouble(_yearly?['total_hours']).round();
+    final currentStreak = _readInt(_streak?['current_streak']);
+    final longestStreak = _readInt(_streak?['longest_streak']);
+    final lastReadDate = _streak?['last_read_date'] as String?;
+
+    final heatmap = {
+      'morning': _readInt(_heatmap?['morning']),
+      'afternoon': _readInt(_heatmap?['afternoon']),
+      'evening': _readInt(_heatmap?['evening']),
+      'night': _readInt(_heatmap?['night']),
     };
+    final heatmapMax = heatmap.values.isEmpty ? 0 : heatmap.values.reduce(max);
 
-    const currentStreak = 5;
+    final weeklyData = _weekly.isEmpty
+        ? List.generate(
+            7,
+            (i) => {
+              'day': _dayLabels[i],
+              'minutes': 0,
+            },
+          )
+        : _weekly
+            .map(
+              (entry) => {
+                'day': _dayLabel(entry['date'] as String? ?? ''),
+                'minutes': _readDouble(entry['total_minutes']).round(),
+              },
+            )
+            .toList(growable: false);
 
-    final heatmap = const {
-      'morning': 8,
-      'afternoon': 3,
-      'evening': 24,
-      'night': 12,
-    };
-
-    final streakDays = List<bool>.generate(28, (i) => Random(42 + i).nextBool(), growable: false)
-      ..[27] = true;
-
-    final minutes = weeklyData.map((e) => (e['minutes'] as int)).toList(growable: false);
+    final minutes = weeklyData.map((e) => e['minutes'] as int).toList(growable: false);
     final maxMinutes = minutes.isEmpty ? 0 : minutes.reduce(max);
     final chartMaxY = max(10, ((maxMinutes / 10).ceil() * 10)).toDouble();
-
-    final emptyDot = isDark ? AppColors.cardBorderDark : AppColors.cardBorderLight;
+    final streakDays = _buildStreakDays(currentStreak, lastReadDate);
+    final year = DateTime.now().year;
 
     return Scaffold(
       appBar: AppBar(title: const Text('İstatistikler')),
@@ -57,18 +180,26 @@ class StatsScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (!_hasAnyData)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  'Henüz istatistik yok. Okuma oturumu tamamladığında burada görünecek.',
+                  style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+                ),
+              ),
             SizedBox(
               height: 108,
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 children: [
-                  _SummaryCard(value: '${yearlyStats['totalBooks']}', label: 'Kitap'),
+                  _SummaryCard(value: _formatInt(totalBooks), label: 'Kitap'),
                   const SizedBox(width: 12),
-                  _SummaryCard(value: '2.340', label: 'Sayfa'),
+                  _SummaryCard(value: _formatInt(totalPages), label: 'Sayfa'),
                   const SizedBox(width: 12),
-                  _SummaryCard(value: '${yearlyStats['totalHours']}', label: 'Saat'),
+                  _SummaryCard(value: _formatInt(totalHours), label: 'Saat'),
                   const SizedBox(width: 12),
-                  _SummaryCard(value: '${yearlyStats['longestStreak']}', label: 'Gün Seri'),
+                  _SummaryCard(value: _formatInt(longestStreak), label: 'Gün Seri'),
                 ],
               ),
             ),
@@ -77,9 +208,22 @@ class StatsScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('🔥 $currentStreak Günlük Seri', style: AppTextStyles.h3.copyWith(color: scheme.onSurface)),
+                  Text(
+                    '🔥 $currentStreak Günlük Seri',
+                    style: AppTextStyles.h3.copyWith(color: scheme.onSurface),
+                  ),
                   const SizedBox(height: 12),
-                  _StreakGrid(days: streakDays, activeColor: AppColors.primary, inactiveColor: emptyDot),
+                  if (currentStreak == 0)
+                    Text(
+                      'Henüz seri yok',
+                      style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+                    )
+                  else
+                    _StreakGrid(
+                      days: streakDays,
+                      activeColor: AppColors.primary,
+                      inactiveColor: emptyDot,
+                    ),
                 ],
               ),
             ),
@@ -90,79 +234,96 @@ class StatsScreen extends StatelessWidget {
                 children: [
                   Text('Bu Hafta', style: AppTextStyles.h3.copyWith(color: scheme.onSurface)),
                   const SizedBox(height: 12),
-                  SizedBox(
-                    height: 200,
-                    child: BarChart(
-                      BarChartData(
-                        maxY: chartMaxY,
-                        gridData: FlGridData(
-                          show: true,
-                          drawVerticalLine: false,
-                          horizontalInterval: (chartMaxY / 4).clamp(10, 9999),
-                          getDrawingHorizontalLine: (value) => FlLine(
-                            color: scheme.outline.withValues(alpha: 0.35),
-                            strokeWidth: 1,
-                          ),
-                        ),
-                        borderData: FlBorderData(show: false),
-                        titlesData: FlTitlesData(
-                          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                          leftTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              reservedSize: 34,
-                              interval: (chartMaxY / 4).clamp(10, 9999),
-                              getTitlesWidget: (value, meta) {
-                                if (value == 0) return const SizedBox.shrink();
-                                return Padding(
-                                  padding: const EdgeInsets.only(right: 6),
-                                  child: Text(
-                                    value.toInt().toString(),
-                                    style: AppTextStyles.caption.copyWith(color: scheme.onSurface.withValues(alpha: 0.65)),
-                                  ),
-                                );
-                              },
+                  if (maxMinutes == 0)
+                    Text(
+                      'Bu hafta henüz okuma yok',
+                      style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+                    )
+                  else
+                    SizedBox(
+                      height: 200,
+                      child: BarChart(
+                        BarChartData(
+                          maxY: chartMaxY,
+                          gridData: FlGridData(
+                            show: true,
+                            drawVerticalLine: false,
+                            horizontalInterval: (chartMaxY / 4).clamp(10, 9999),
+                            getDrawingHorizontalLine: (value) => FlLine(
+                              color: scheme.outline.withValues(alpha: 0.35),
+                              strokeWidth: 1,
                             ),
                           ),
-                          bottomTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              getTitlesWidget: (value, meta) {
-                                final idx = value.toInt();
-                                if (idx < 0 || idx >= weeklyData.length) return const SizedBox.shrink();
-                                return Padding(
-                                  padding: const EdgeInsets.only(top: 6),
-                                  child: Text(
-                                    weeklyData[idx]['day'] as String,
-                                    style: AppTextStyles.caption.copyWith(color: scheme.onSurface.withValues(alpha: 0.7)),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                        barTouchData: BarTouchData(enabled: false),
-                        barGroups: List.generate(weeklyData.length, (i) {
-                          final v = weeklyData[i]['minutes'] as int;
-                          final isZero = v == 0;
-                          return BarChartGroupData(
-                            x: i,
-                            barRods: [
-                              BarChartRodData(
-                                toY: v.toDouble(),
-                                width: 14,
-                                borderRadius: BorderRadius.circular(6),
-                                color: isZero ? scheme.outline.withValues(alpha: 0.35) : AppColors.primary,
+                          borderData: FlBorderData(show: false),
+                          titlesData: FlTitlesData(
+                            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                            leftTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                reservedSize: 34,
+                                interval: (chartMaxY / 4).clamp(10, 9999),
+                                getTitlesWidget: (value, meta) {
+                                  if (value == 0) return const SizedBox.shrink();
+                                  return Padding(
+                                    padding: const EdgeInsets.only(right: 6),
+                                    child: Text(
+                                      value.toInt().toString(),
+                                      style: AppTextStyles.caption.copyWith(
+                                        color: scheme.onSurface.withValues(alpha: 0.65),
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
-                            ],
-                          );
-                        }),
+                            ),
+                            bottomTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                getTitlesWidget: (value, meta) {
+                                  final idx = value.toInt();
+                                  if (idx < 0 || idx >= weeklyData.length) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  return Padding(
+                                    padding: const EdgeInsets.only(top: 6),
+                                    child: Text(
+                                      weeklyData[idx]['day'] as String,
+                                      style: AppTextStyles.caption.copyWith(
+                                        color: scheme.onSurface.withValues(alpha: 0.7),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                          barTouchData: BarTouchData(enabled: false),
+                          barGroups: List.generate(weeklyData.length, (i) {
+                            final v = weeklyData[i]['minutes'] as int;
+                            final isZero = v == 0;
+                            return BarChartGroupData(
+                              x: i,
+                              barRods: [
+                                BarChartRodData(
+                                  toY: v.toDouble(),
+                                  width: 14,
+                                  borderRadius: BorderRadius.circular(6),
+                                  color: isZero
+                                      ? scheme.outline.withValues(alpha: 0.35)
+                                      : AppColors.primary,
+                                ),
+                              ],
+                            );
+                          }),
+                        ),
                       ),
                     ),
-                  ),
                   const SizedBox(height: 6),
-                  Text('Dakika', style: AppTextStyles.caption.copyWith(color: scheme.onSurface.withValues(alpha: 0.6))),
+                  Text(
+                    'Dakika',
+                    style: AppTextStyles.caption.copyWith(color: scheme.onSurface.withValues(alpha: 0.6)),
+                  ),
                 ],
               ),
             ),
@@ -171,35 +332,45 @@ class StatsScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('En Çok Ne Zaman Okuyorsun?', style: AppTextStyles.h3.copyWith(color: scheme.onSurface)),
+                  Text(
+                    'En Çok Ne Zaman Okuyorsun?',
+                    style: AppTextStyles.h3.copyWith(color: scheme.onSurface),
+                  ),
                   const SizedBox(height: 12),
-                  _HeatRow(
-                    icon: Icons.wb_sunny_outlined,
-                    label: 'Sabah',
-                    value: heatmap['morning']!,
-                    maxValue: heatmap.values.reduce(max),
-                  ),
-                  const SizedBox(height: 10),
-                  _HeatRow(
-                    icon: Icons.lunch_dining_outlined,
-                    label: 'Öğlen',
-                    value: heatmap['afternoon']!,
-                    maxValue: heatmap.values.reduce(max),
-                  ),
-                  const SizedBox(height: 10),
-                  _HeatRow(
-                    icon: Icons.nightlight_round,
-                    label: 'Akşam',
-                    value: heatmap['evening']!,
-                    maxValue: heatmap.values.reduce(max),
-                  ),
-                  const SizedBox(height: 10),
-                  _HeatRow(
-                    icon: Icons.dark_mode_outlined,
-                    label: 'Gece',
-                    value: heatmap['night']!,
-                    maxValue: heatmap.values.reduce(max),
-                  ),
+                  if (heatmapMax == 0)
+                    Text(
+                      'Henüz oturum verisi yok',
+                      style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+                    )
+                  else ...[
+                    _HeatRow(
+                      icon: Icons.wb_sunny_outlined,
+                      label: 'Sabah',
+                      value: heatmap['morning']!,
+                      maxValue: heatmapMax,
+                    ),
+                    const SizedBox(height: 10),
+                    _HeatRow(
+                      icon: Icons.lunch_dining_outlined,
+                      label: 'Öğlen',
+                      value: heatmap['afternoon']!,
+                      maxValue: heatmapMax,
+                    ),
+                    const SizedBox(height: 10),
+                    _HeatRow(
+                      icon: Icons.nightlight_round,
+                      label: 'Akşam',
+                      value: heatmap['evening']!,
+                      maxValue: heatmapMax,
+                    ),
+                    const SizedBox(height: 10),
+                    _HeatRow(
+                      icon: Icons.dark_mode_outlined,
+                      label: 'Gece',
+                      value: heatmap['night']!,
+                      maxValue: heatmapMax,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -208,7 +379,7 @@ class StatsScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('2026 Özeti', style: AppTextStyles.h3.copyWith(color: scheme.onSurface)),
+                  Text('$year Özeti', style: AppTextStyles.h3.copyWith(color: scheme.onSurface)),
                   const SizedBox(height: 12),
                   GridView.count(
                     crossAxisCount: 2,
@@ -218,10 +389,26 @@ class StatsScreen extends StatelessWidget {
                     crossAxisSpacing: 12,
                     childAspectRatio: 2.1,
                     children: [
-                      _YearCell(icon: Icons.library_books_outlined, value: '${yearlyStats['totalBooks']}', label: 'Kitap'),
-                      _YearCell(icon: Icons.menu_book_outlined, value: '${yearlyStats['totalPages']}', label: 'Sayfa'),
-                      _YearCell(icon: Icons.timer_outlined, value: '${yearlyStats['totalHours']}', label: 'Saat'),
-                      _YearCell(icon: Icons.local_fire_department_outlined, value: '${yearlyStats['longestStreak']}', label: 'En Uzun Seri'),
+                      _YearCell(
+                        icon: Icons.library_books_outlined,
+                        value: _formatInt(totalBooks),
+                        label: 'Kitap',
+                      ),
+                      _YearCell(
+                        icon: Icons.menu_book_outlined,
+                        value: _formatInt(totalPages),
+                        label: 'Sayfa',
+                      ),
+                      _YearCell(
+                        icon: Icons.timer_outlined,
+                        value: _formatInt(totalHours),
+                        label: 'Saat',
+                      ),
+                      _YearCell(
+                        icon: Icons.local_fire_department_outlined,
+                        value: _formatInt(longestStreak),
+                        label: 'En Uzun Seri',
+                      ),
                     ],
                   ),
                 ],
@@ -272,7 +459,6 @@ class _StreakGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 4 rows x 7 columns
     return Wrap(
       spacing: 4,
       runSpacing: 4,
@@ -317,7 +503,10 @@ class _HeatRow extends StatelessWidget {
         const SizedBox(width: 8),
         SizedBox(
           width: 56,
-          child: Text(label, style: AppTextStyles.bodySmall.copyWith(color: scheme.onSurface.withValues(alpha: 0.8))),
+          child: Text(
+            label,
+            style: AppTextStyles.bodySmall.copyWith(color: scheme.onSurface.withValues(alpha: 0.8)),
+          ),
         ),
         const SizedBox(width: 8),
         Expanded(
@@ -378,4 +567,3 @@ class _YearCell extends StatelessWidget {
     );
   }
 }
-

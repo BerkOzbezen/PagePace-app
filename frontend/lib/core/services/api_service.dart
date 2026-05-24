@@ -15,41 +15,18 @@ class ApiService {
                 receiveTimeout: const Duration(seconds: 30),
                 headers: {'Content-Type': 'application/json'},
               ),
-            ) {
-    _dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: _attachAuthHeader,
-        onError: _handleError,
-      ),
-    );
-  }
+            );
 
   static const String baseUrl = 'http://192.168.1.236:8000';
 
   final Dio _dio;
   final FirebaseAuth _auth;
 
-  Future<void> _attachAuthHeader(
-    RequestOptions options,
-    RequestInterceptorHandler handler,
-  ) async {
+  Future<Options> _authOptions() async {
     final user = _auth.currentUser;
-    if (user != null) {
-      final token = await user.getIdToken(true);
-      if (token != null) {
-        options.headers['Authorization'] = 'Bearer $token';
-        debugPrint('API auth: token attached for ${user.email}');
-      } else {
-        debugPrint('API auth: getIdToken returned null for ${user.email}');
-      }
-    } else {
-      debugPrint('API auth: no current user, request sent without token');
-    }
-    handler.next(options);
-  }
-
-  void _handleError(DioException error, ErrorInterceptorHandler handler) {
-    handler.reject(error);
+    if (user == null) throw UnauthorizedException('Giriş gerekli');
+    final token = await user.getIdToken(true);
+    return Options(headers: {'Authorization': 'Bearer $token'});
   }
 
   Never _throwFromResponse(Response<dynamic>? response) {
@@ -107,7 +84,12 @@ class ApiService {
 
   Future<List<Map<String, dynamic>>> getBooks() async {
     debugPrint('Fetching books from: $baseUrl/api/v1/books');
-    final response = await _request(() => _dio.get<Map<String, dynamic>>('/api/v1/books'));
+    final response = await _request(
+      () async => _dio.get<Map<String, dynamic>>(
+        '/api/v1/books',
+        options: await _authOptions(),
+      ),
+    );
     final data = response.data;
     if (data == null) return [];
 
@@ -127,7 +109,7 @@ class ApiService {
     String? coverUrl,
   }) async {
     final response = await _request(
-      () => _dio.post<Map<String, dynamic>>(
+      () async => _dio.post<Map<String, dynamic>>(
         '/api/v1/books',
         data: {
           'title': title,
@@ -135,6 +117,7 @@ class ApiService {
           if (isbn != null && isbn.isNotEmpty) 'isbn': isbn,
           if (coverUrl != null) 'cover_url': coverUrl,
         },
+        options: await _authOptions(),
       ),
     );
     return Map<String, dynamic>.from(response.data ?? {});
@@ -142,9 +125,113 @@ class ApiService {
 
   Future<Map<String, dynamic>> searchBookByIsbn(String isbn) async {
     final response = await _request(
-      () => _dio.get<Map<String, dynamic>>(
+      () async => _dio.get<Map<String, dynamic>>(
         '/api/v1/books/search',
         queryParameters: {'isbn': isbn},
+        options: await _authOptions(),
+      ),
+    );
+    return Map<String, dynamic>.from(response.data ?? {});
+  }
+
+  Future<void> createSession(Map<String, dynamic> data) async {
+    await _request(
+      () async => _dio.post<Map<String, dynamic>>(
+        '/api/v1/sessions',
+        data: data,
+        options: await _authOptions(),
+      ),
+    );
+  }
+
+  Future<Map<String, dynamic>> getBook(String id) async {
+    final response = await _request(
+      () async => _dio.get<Map<String, dynamic>>(
+        '/api/v1/books/$id',
+        options: await _authOptions(),
+      ),
+    );
+    return Map<String, dynamic>.from(response.data ?? {});
+  }
+
+  Future<Map<String, dynamic>?> getBookPace(String id) async {
+    try {
+      final response = await _request(
+        () async => _dio.get<Map<String, dynamic>>(
+          '/api/v1/books/$id/pace',
+          options: await _authOptions(),
+        ),
+      );
+      return Map<String, dynamic>.from(response.data ?? {});
+    } on ValidationException {
+      return null;
+    } on NotFoundException {
+      return null;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getSessions(String bookId) async {
+    try {
+      final response = await _request(
+        () async => _dio.get<Map<String, dynamic>>(
+          '/api/v1/sessions',
+          queryParameters: {'book_id': bookId},
+          options: await _authOptions(),
+        ),
+      );
+      final data = response.data;
+      if (data == null) return [];
+      final sessions = data['sessions'];
+      if (sessions is! List) return [];
+      return sessions
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+    } on UnauthorizedException {
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getWeeklyStats() async {
+    final response = await _request(
+      () async => _dio.get<List<dynamic>>(
+        '/api/v1/stats/weekly',
+        options: await _authOptions(),
+      ),
+    );
+    final data = response.data;
+    if (data == null) return [];
+    return data
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> getYearlyStats() async {
+    final response = await _request(
+      () async => _dio.get<Map<String, dynamic>>(
+        '/api/v1/stats/yearly',
+        options: await _authOptions(),
+      ),
+    );
+    return Map<String, dynamic>.from(response.data ?? {});
+  }
+
+  Future<Map<String, dynamic>> getStreakStats() async {
+    final response = await _request(
+      () async => _dio.get<Map<String, dynamic>>(
+        '/api/v1/stats/streak',
+        options: await _authOptions(),
+      ),
+    );
+    return Map<String, dynamic>.from(response.data ?? {});
+  }
+
+  Future<Map<String, dynamic>> getHeatmap() async {
+    final response = await _request(
+      () async => _dio.get<Map<String, dynamic>>(
+        '/api/v1/stats/heatmap',
+        options: await _authOptions(),
       ),
     );
     return Map<String, dynamic>.from(response.data ?? {});

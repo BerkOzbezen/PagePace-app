@@ -30,7 +30,8 @@ async def get_current_user(
 ) -> dict:
     token = credentials.credentials
     try:
-        decoded = auth.verify_id_token(token)
+        decoded = auth.verify_id_token(token, clock_skew_seconds=60)
         return decoded
-    except Exception:
-        raise HTTPException(status_code=401, detail="Geçersiz veya süresi dolmuş token")
+    except Exception as e:
+        print(f"Token verification failed: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=401, detail=f"Token hatası: {str(e)}")

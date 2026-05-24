@@ -11,13 +11,19 @@ int coverColorFromId(String id) {
   return palette[id.hashCode.abs() % palette.length];
 }
 
+int _readInt(dynamic value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return 0;
+}
+
 Map<String, Object?> bookFromApi(Map<String, dynamic> json) {
   final id = (json['id'] as String?) ?? '';
   return {
     'id': id,
     'title': json['title'] as String? ?? '',
-    'totalPages': json['total_pages'] as int? ?? 0,
-    'currentPage': json['current_page'] as int? ?? 0,
+    'totalPages': _readInt(json['total_pages']),
+    'currentPage': _readInt(json['current_page']),
     'status': json['status'] as String? ?? 'reading',
     'coverColor': coverColorFromId(id),
     'coverUrl': json['cover_url'] as String?,

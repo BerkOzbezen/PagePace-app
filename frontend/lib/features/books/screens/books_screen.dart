@@ -37,6 +37,8 @@ class _BooksScreenState extends State<BooksScreen> {
       _loadFailed = false;
     });
 
+    await FirebaseAuth.instance.currentUser?.getIdToken(true);
+
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
@@ -50,7 +52,6 @@ class _BooksScreenState extends State<BooksScreen> {
         return;
       }
 
-      await user.getIdToken(true);
       final raw = await _api.getBooks();
       final books = raw.map(bookFromApi).toList(growable: false);
       if (!mounted) return;
