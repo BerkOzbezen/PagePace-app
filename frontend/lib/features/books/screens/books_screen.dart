@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/services/api_service.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/utils/book_mapper.dart';
 import '../../../shared/widgets/pp_button.dart';
-import '../../../shared/widgets/pp_card.dart';
 import '../widgets/book_list_item.dart';
 
 class BooksScreen extends StatefulWidget {
@@ -81,6 +81,20 @@ class _BooksScreenState extends State<BooksScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        elevation: 2,
+        scrolledUnderElevation: 4,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                AppColors.primary.withValues(alpha: 0.14),
+                scheme.surface,
+              ],
+            ),
+          ),
+        ),
         title: const Text('Kitaplığım'),
         actions: [
           IconButton(
@@ -103,7 +117,9 @@ class _BooksScreenState extends State<BooksScreen> {
                     style: AppTextStyles.h3.copyWith(color: scheme.onSurface),
                   ),
                 )
-              : DefaultTabController(
+              : _books.isEmpty
+                  ? const _EmptyLibraryView()
+                  : DefaultTabController(
                   length: 3,
                   child: Column(
                     children: [
@@ -160,31 +176,9 @@ class _BooksTab extends StatelessWidget {
 
     if (books.isEmpty) {
       return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: PPCard(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(emptyLabel, style: AppTextStyles.h3.copyWith(color: scheme.onSurface)),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Kütüphaneni oluşturmaya başla.',
-                    style: AppTextStyles.bodySmall.copyWith(color: scheme.onSurface.withValues(alpha: 0.7)),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 12),
-                  PPButton(
-                    label: 'Kitap ekle',
-                    fullWidth: true,
-                    onPressed: () => context.go('/books/add'),
-                  ),
-                ],
-              ),
-            ),
-          ),
+        child: Text(
+          emptyLabel,
+          style: AppTextStyles.body.copyWith(color: scheme.onSurface.withValues(alpha: 0.7)),
         ),
       );
     }
@@ -211,6 +205,42 @@ class _BooksTab extends StatelessWidget {
           onTap: () => context.go('/books/$id'),
         );
       },
+    );
+  }
+}
+
+class _EmptyLibraryView extends StatelessWidget {
+  const _EmptyLibraryView();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 320),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.menu_book, size: 80, color: AppColors.primary),
+              const SizedBox(height: 20),
+              Text(
+                'Henüz kitap eklemediniz',
+                style: AppTextStyles.h3.copyWith(color: scheme.onSurface),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              PPButton(
+                label: 'İlk kitabınızı ekleyin',
+                fullWidth: true,
+                onPressed: () => context.go('/books/add'),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

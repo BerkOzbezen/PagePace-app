@@ -7,6 +7,7 @@ import '../../../core/services/api_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/utils/book_mapper.dart';
+import '../../../shared/widgets/pp_book_cover.dart';
 import '../../../shared/widgets/pp_button.dart';
 import '../../../shared/widgets/pp_card.dart';
 import '../../../shared/widgets/pp_text_field.dart';
@@ -48,6 +49,7 @@ class _TimerScreenState extends State<TimerScreen> {
   }
 
   Color get _coverColor => Color((currentBook['coverColor'] as int?) ?? 0xFF6C63FF);
+  String get _coverUrl => (currentBook['coverUrl'] as String?) ?? '';
 
   @override
   void initState() {
@@ -276,9 +278,9 @@ class _TimerScreenState extends State<TimerScreen> {
     final scheme = Theme.of(context).colorScheme;
 
     final timerStyle = AppTextStyles.h1.copyWith(
-      fontSize: 48,
+      fontSize: _state == _TimerUiState.running ? 56 : 48,
       fontFamily: 'monospace',
-      fontWeight: FontWeight.w600,
+      fontWeight: _state == _TimerUiState.running ? FontWeight.w700 : FontWeight.w600,
       color: switch (_state) {
         _TimerUiState.paused => scheme.onSurface.withValues(alpha: 0.55),
         _ => scheme.onSurface,
@@ -290,6 +292,7 @@ class _TimerScreenState extends State<TimerScreen> {
           title: _title,
           subtitle: '$_currentPage. sayfadan devam et',
           coverColor: _coverColor,
+          coverUrl: _coverUrl,
           timeText: _format(_elapsed),
           timerStyle: timerStyle,
           onStart: _start,
@@ -297,6 +300,7 @@ class _TimerScreenState extends State<TimerScreen> {
       _TimerUiState.running => _RunningView(
           title: _title,
           coverColor: _coverColor,
+          coverUrl: _coverUrl,
           timeText: _format(_elapsed),
           timerStyle: timerStyle,
           pulseOn: _pulse,
@@ -333,6 +337,7 @@ class _IdleView extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.coverColor,
+    required this.coverUrl,
     required this.timeText,
     required this.timerStyle,
     required this.onStart,
@@ -341,6 +346,7 @@ class _IdleView extends StatelessWidget {
   final String title;
   final String subtitle;
   final Color coverColor;
+  final String coverUrl;
   final String timeText;
   final TextStyle timerStyle;
   final VoidCallback onStart;
@@ -352,15 +358,13 @@ class _IdleView extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            width: 160,
-            height: 220,
-            color: coverColor,
-            alignment: Alignment.center,
-            child: Icon(Icons.menu_book, size: 56, color: scheme.onPrimary.withValues(alpha: 0.9)),
-          ),
+        PPBookCover(
+          coverUrl: coverUrl,
+          coverColor: coverColor,
+          width: 160,
+          height: 220,
+          borderRadius: 12,
+          iconSize: 56,
         ),
         const SizedBox(height: 14),
         Text(title, style: AppTextStyles.h2.copyWith(color: scheme.onSurface), textAlign: TextAlign.center),
@@ -384,6 +388,7 @@ class _RunningView extends StatelessWidget {
   const _RunningView({
     required this.title,
     required this.coverColor,
+    required this.coverUrl,
     required this.timeText,
     required this.timerStyle,
     required this.pulseOn,
@@ -393,6 +398,7 @@ class _RunningView extends StatelessWidget {
 
   final String title;
   final Color coverColor;
+  final String coverUrl;
   final String timeText;
   final TextStyle timerStyle;
   final bool pulseOn;
@@ -409,15 +415,13 @@ class _RunningView extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           child: Row(
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: Container(
-                  width: 64,
-                  height: 64,
-                  color: coverColor,
-                  alignment: Alignment.center,
-                  child: Icon(Icons.menu_book, color: scheme.onPrimary.withValues(alpha: 0.9)),
-                ),
+              PPBookCover(
+                coverUrl: coverUrl,
+                coverColor: coverColor,
+                width: 64,
+                height: 64,
+                borderRadius: 10,
+                iconSize: 28,
               ),
               const SizedBox(width: 12),
               Expanded(

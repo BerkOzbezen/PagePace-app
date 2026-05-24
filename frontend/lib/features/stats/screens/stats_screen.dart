@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -204,28 +205,11 @@ class _StatsScreenState extends State<StatsScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            PPCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '🔥 $currentStreak Günlük Seri',
-                    style: AppTextStyles.h3.copyWith(color: scheme.onSurface),
-                  ),
-                  const SizedBox(height: 12),
-                  if (currentStreak == 0)
-                    Text(
-                      'Henüz seri yok',
-                      style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
-                    )
-                  else
-                    _StreakGrid(
-                      days: streakDays,
-                      activeColor: AppColors.primary,
-                      inactiveColor: emptyDot,
-                    ),
-                ],
-              ),
+            _PulsingStreakCard(
+              currentStreak: currentStreak,
+              streakDays: streakDays,
+              activeColor: AppColors.primary,
+              inactiveColor: emptyDot,
             ),
             const SizedBox(height: 12),
             PPCard(
@@ -432,15 +416,112 @@ class _SummaryCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return SizedBox(
       width: 150,
-      child: PPCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(value, style: AppTextStyles.h2.copyWith(color: scheme.onSurface)),
-            const SizedBox(height: 6),
-            Text(label, style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary)),
-          ],
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              AppColors.primary.withValues(alpha: 0.1),
+              AppColors.primary.withValues(alpha: 0.03),
+            ],
+          ),
+          border: Border.all(color: scheme.outline),
         ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(value, style: AppTextStyles.h2.copyWith(color: scheme.onSurface)),
+              const SizedBox(height: 6),
+              Text(label, style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PulsingStreakCard extends StatefulWidget {
+  const _PulsingStreakCard({
+    required this.currentStreak,
+    required this.streakDays,
+    required this.activeColor,
+    required this.inactiveColor,
+  });
+
+  final int currentStreak;
+  final List<bool> streakDays;
+  final Color activeColor;
+  final Color inactiveColor;
+
+  @override
+  State<_PulsingStreakCard> createState() => _PulsingStreakCardState();
+}
+
+class _PulsingStreakCardState extends State<_PulsingStreakCard> {
+  Timer? _pulseTimer;
+  bool _pulse = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseTimer = Timer.periodic(const Duration(milliseconds: 900), (_) {
+      if (!mounted) return;
+      setState(() => _pulse = !_pulse);
+    });
+  }
+
+  @override
+  void dispose() {
+    _pulseTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return PPCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AnimatedScale(
+            scale: _pulse ? 1.04 : 1.0,
+            duration: const Duration(milliseconds: 650),
+            curve: Curves.easeInOut,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '🔥 ${widget.currentStreak} Günlük Seri',
+              style: AppTextStyles.h3.copyWith(
+                color: scheme.onSurface,
+                shadows: _pulse
+                    ? [
+                        Shadow(
+                          color: AppColors.warning.withValues(alpha: 0.45),
+                          blurRadius: 8,
+                        ),
+                      ]
+                    : null,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (widget.currentStreak == 0)
+            Text(
+              'Henüz seri yok',
+              style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+            )
+          else
+            _StreakGrid(
+              days: widget.streakDays,
+              activeColor: widget.activeColor,
+              inactiveColor: widget.inactiveColor,
+            ),
+        ],
       ),
     );
   }

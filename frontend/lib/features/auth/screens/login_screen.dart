@@ -96,30 +96,56 @@ class _LoginScreenState extends State<LoginScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 const SizedBox(height: 12),
-                Column(
-                  children: [
-                    const Icon(Icons.menu_book, size: 48, color: AppColors.primary),
-                    const SizedBox(height: 10),
-                    Text('PagePace', style: AppTextStyles.h1.copyWith(color: scheme.onSurface)),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Your reading, your pace.',
-                      style: AppTextStyles.body.copyWith(color: scheme.onSurface.withValues(alpha: 0.7)),
-                      textAlign: TextAlign.center,
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        AppColors.primary.withValues(alpha: 0.22),
+                        AppColors.primaryDark.withValues(alpha: 0.06),
+                      ],
                     ),
-                  ],
+                  ),
+                  child: Column(
+                    children: [
+                      const Icon(Icons.menu_book, size: 48, color: AppColors.primary),
+                      const SizedBox(height: 10),
+                      ShaderMask(
+                        blendMode: BlendMode.srcIn,
+                        shaderCallback: (bounds) => const LinearGradient(
+                          colors: [AppColors.primary, AppColors.primaryDark],
+                        ).createShader(bounds),
+                        child: Text(
+                          'PagePace',
+                          style: AppTextStyles.h1.copyWith(color: Colors.white),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Your reading, your pace.',
+                        style: AppTextStyles.body.copyWith(color: scheme.onSurface.withValues(alpha: 0.7)),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 16),
                 PPCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      PPButton(
-                        label: 'Google ile Giriş Yap',
-                        variant: PPButtonVariant.secondary,
-                        fullWidth: true,
-                        leading: const Icon(Icons.g_mobiledata),
-                        onPressed: _loading ? null : _signInWithGoogle,
+                      _ShadowedButton(
+                        child: PPButton(
+                          label: 'Google ile Giriş Yap',
+                          variant: PPButtonVariant.secondary,
+                          fullWidth: true,
+                          leading: const Icon(Icons.g_mobiledata),
+                          onPressed: _loading ? null : _signInWithGoogle,
+                        ),
                       ),
                       const SizedBox(height: 12),
                       Row(
@@ -159,10 +185,12 @@ class _LoginScreenState extends State<LoginScreen> {
                         onChanged: (_) => setState(() => _passwordError = null),
                       ),
                       const SizedBox(height: 12),
-                      PPButton(
-                        label: _loading ? 'Giriş yapılıyor...' : 'Giriş Yap',
-                        fullWidth: true,
-                        onPressed: _loading ? null : _signIn,
+                      _ShadowedButton(
+                        child: PPButton(
+                          label: _loading ? 'Giriş yapılıyor...' : 'Giriş Yap',
+                          fullWidth: true,
+                          onPressed: _loading ? null : _signIn,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Row(
@@ -183,6 +211,29 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ShadowedButton extends StatelessWidget {
+  const _ShadowedButton({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.22),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: child,
     );
   }
 }
