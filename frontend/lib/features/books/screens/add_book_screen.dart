@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -98,6 +97,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
     if (_titleError != null || _pagesError != null) return;
 
     setState(() => _saving = true);
+    final navigator = Navigator.of(context);
     try {
       await _api.createBook(
         title: title,
@@ -105,9 +105,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
         isbn: isbn.isEmpty ? null : isbn,
       );
       if (!mounted) return;
-      await FirebaseAuth.instance.currentUser?.getIdToken(true);
-      if (!mounted) return;
-      context.go('/books');
+      navigator.pop();
     } on ApiException catch (e) {
       _showError(e.message);
     } catch (_) {
