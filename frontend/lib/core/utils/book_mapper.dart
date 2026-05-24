@@ -26,7 +26,7 @@ Map<String, Object?> bookFromApi(Map<String, dynamic> json) {
     'currentPage': _readInt(json['current_page']),
     'status': json['status'] as String? ?? 'reading',
     'coverColor': coverColorFromId(id),
-    'coverUrl': json['cover_url'] as String?,
+    'coverUrl': json['cover_url'] as String? ?? '',
     'isbn': json['isbn'] as String?,
   };
 }

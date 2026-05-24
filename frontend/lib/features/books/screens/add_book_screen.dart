@@ -18,6 +18,7 @@ class AddBookScreen extends StatefulWidget {
 class _AddBookScreenState extends State<AddBookScreen> {
   final _api = ApiService();
   final _isbnController = TextEditingController();
+  final _titleSearchController = TextEditingController();
   final _titleController = TextEditingController();
   final _authorController = TextEditingController();
   final _totalPagesController = TextEditingController();
@@ -25,6 +26,9 @@ class _AddBookScreenState extends State<AddBookScreen> {
   int _selectedCoverColor = 0xFF6C63FF;
   bool _saving = false;
   bool _searching = false;
+  bool _searchingTitle = false;
+  String _coverUrl = '';
+  List<Map<String, dynamic>> _titleSearchResults = [];
 
   String? _titleError;
   String? _pagesError;
@@ -41,6 +45,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
   @override
   void dispose() {
     _isbnController.dispose();
+    _titleSearchController.dispose();
     _titleController.dispose();
     _authorController.dispose();
     _totalPagesController.dispose();
@@ -54,6 +59,12 @@ class _AddBookScreenState extends State<AddBookScreen> {
     );
   }
 
+  int? _readPages(dynamic value) {
+    if (value is int && value > 0) return value;
+    if (value is num && value > 0) return value.toInt();
+    return null;
+  }
+
   Future<void> _autofillFromIsbn() async {
     final isbn = _isbnController.text.trim();
     if (isbn.isEmpty) {
@@ -65,12 +76,14 @@ class _AddBookScreenState extends State<AddBookScreen> {
     try {
       final result = await _api.searchBookByIsbn(isbn);
       if (!mounted) return;
+      final pages = _readPages(result['total_pages']);
       setState(() {
         _titleController.text = result['title'] as String? ?? '';
-        final pages = result['total_pages'];
-        if (pages is int && pages > 0) {
+        if (pages != null) {
           _totalPagesController.text = pages.toString();
         }
+        _coverUrl = result['cover_url'] as String? ??
+            'https://covers.openlibrary.org/b/isbn/$isbn-M.jpg';
         _titleError = null;
         _pagesError = null;
       });
@@ -81,6 +94,51 @@ class _AddBookScreenState extends State<AddBookScreen> {
     } finally {
       if (mounted) setState(() => _searching = false);
     }
+  }
+
+  Future<void> _searchByTitle() async {
+    final query = _titleSearchController.text.trim();
+    if (query.isEmpty) {
+      _showError('Kitap adı girin');
+      return;
+    }
+
+    setState(() {
+      _searchingTitle = true;
+      _titleSearchResults = [];
+    });
+
+    try {
+      final results = await _api.searchBooksByTitle(query);
+      if (!mounted) return;
+      setState(() => _titleSearchResults = results);
+      if (results.isEmpty) _showError('Sonuç bulunamadı');
+    } on ApiException catch (e) {
+      _showError(e.message);
+    } catch (_) {
+      _showError('Arama başarısız');
+    } finally {
+      if (mounted) setState(() => _searchingTitle = false);
+    }
+  }
+
+  void _selectTitleResult(Map<String, dynamic> result) {
+    final pages = _readPages(result['total_pages']);
+    final isbn = result['isbn'] as String?;
+    setState(() {
+      _titleController.text = result['title'] as String? ?? '';
+      _authorController.text = result['author_name'] as String? ?? '';
+      if (pages != null) {
+        _totalPagesController.text = pages.toString();
+      }
+      if (isbn != null && isbn.isNotEmpty) {
+        _isbnController.text = isbn;
+      }
+      _coverUrl = result['cover_url'] as String? ?? '';
+      _titleSearchResults = [];
+      _titleError = null;
+      _pagesError = null;
+    });
   }
 
   Future<void> _save() async {
@@ -103,6 +161,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
         title: title,
         totalPages: pages!,
         isbn: isbn.isEmpty ? null : isbn,
+        coverUrl: _coverUrl.isEmpty ? null : _coverUrl,
       );
       if (!mounted) return;
       navigator.pop();
@@ -118,9 +177,10 @@ class _AddBookScreenState extends State<AddBookScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final busy = _saving || _searching;
+    final busy = _saving || _searching || _searchingTitle;
 
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: const Text('Kitap Ekle'),
         automaticallyImplyLeading: true,
@@ -130,13 +190,20 @@ class _AddBookScreenState extends State<AddBookScreen> {
           icon: const Icon(Icons.arrow_back),
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          PPCard(
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        behavior: HitTestBehavior.opaque,
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                PPCard(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
                 PPTextField(
                   label: 'ISBN',
                   hint: 'Örn. 978... ',
@@ -152,6 +219,49 @@ class _AddBookScreenState extends State<AddBookScreen> {
                   variant: PPButtonVariant.secondary,
                   onPressed: busy ? null : _autofillFromIsbn,
                 ),
+                const SizedBox(height: 14),
+                PPTextField(
+                  label: 'Kitap Adıyla Ara',
+                  hint: 'Örn. Dune',
+                  controller: _titleSearchController,
+                  textInputAction: TextInputAction.search,
+                  prefixIcon: Icons.search,
+                ),
+                const SizedBox(height: 10),
+                PPButton(
+                  label: _searchingTitle ? 'Aranıyor...' : 'Ara',
+                  fullWidth: true,
+                  variant: PPButtonVariant.secondary,
+                  onPressed: busy ? null : _searchByTitle,
+                ),
+                if (_titleSearchResults.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<Map<String, dynamic>>(
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: 'Sonuç seç',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    items: _titleSearchResults.map((result) {
+                      final title = result['title'] as String? ?? 'Bilinmeyen';
+                      final author = result['author_name'] as String? ?? '';
+                      return DropdownMenuItem<Map<String, dynamic>>(
+                        value: result,
+                        child: Text(
+                          author.isEmpty ? title : '$title — $author',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: busy
+                        ? null
+                        : (value) {
+                            if (value != null) {
+                              _selectTitleResult(value);
+                            }
+                          },
+                  ),
+                ],
                 const SizedBox(height: 14),
                 PPTextField(
                   label: 'Kitap Adı',
@@ -179,7 +289,12 @@ class _AddBookScreenState extends State<AddBookScreen> {
                   onChanged: (_) => setState(() => _pagesError = null),
                 ),
                 const SizedBox(height: 14),
-                Text('Kapak rengi', style: AppTextStyles.bodySmall.copyWith(color: scheme.onSurface.withValues(alpha: 0.75))),
+                Text(
+                  'Kapak rengi',
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: scheme.onSurface.withValues(alpha: 0.75),
+                  ),
+                ),
                 const SizedBox(height: 10),
                 Wrap(
                   spacing: 10,
@@ -195,7 +310,9 @@ class _AddBookScreenState extends State<AddBookScreen> {
                         decoration: BoxDecoration(
                           color: Color(c),
                           shape: BoxShape.circle,
-                          border: selected ? Border.all(color: scheme.onSurface, width: 2) : Border.all(color: scheme.outline),
+                          border: selected
+                              ? Border.all(color: scheme.onSurface, width: 2)
+                              : Border.all(color: scheme.outline),
                         ),
                       ),
                     );
@@ -207,10 +324,13 @@ class _AddBookScreenState extends State<AddBookScreen> {
                   fullWidth: true,
                   onPressed: busy ? null : _save,
                 ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }

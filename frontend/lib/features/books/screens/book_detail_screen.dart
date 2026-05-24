@@ -6,6 +6,7 @@ import '../../../core/services/api_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/utils/book_mapper.dart';
+import '../../../shared/widgets/pp_book_cover.dart';
 import '../../../shared/widgets/pp_button.dart';
 import '../../../shared/widgets/pp_card.dart';
 
@@ -83,6 +84,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final coverColor = Color(coverColorFromId(widget.bookId));
+    final coverUrl = (_book?['coverUrl'] as String?) ?? '';
     final title = (_book?['title'] as String?)?.trim().isNotEmpty == true
         ? _book!['title'] as String
         : 'Kitap';
@@ -116,17 +118,14 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: Container(
+          LayoutBuilder(
+            builder: (context, constraints) => PPBookCover(
+              coverUrl: coverUrl,
+              coverColor: coverColor,
+              width: constraints.maxWidth,
               height: 200,
-              color: coverColor,
-              alignment: Alignment.center,
-              child: Icon(
-                Icons.menu_book,
-                size: 64,
-                color: scheme.onPrimary.withValues(alpha: 0.9),
-              ),
+              borderRadius: 16,
+              iconSize: 64,
             ),
           ),
           const SizedBox(height: 14),

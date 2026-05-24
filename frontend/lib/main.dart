@@ -2,7 +2,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
+import 'core/providers/theme_provider.dart';
 import 'core/router/go_router_refresh_stream.dart';
 import 'core/theme/app_colors.dart';
 import 'firebase_options.dart';
@@ -13,6 +15,7 @@ import 'features/books/screens/add_book_screen.dart';
 import 'features/books/screens/book_detail_screen.dart';
 import 'features/books/screens/books_screen.dart';
 import 'features/profile/screens/profile_screen.dart';
+import 'features/settings/screens/settings_screen.dart';
 import 'features/social/screens/friend_profile_screen.dart';
 import 'features/social/screens/social_screen.dart';
 import 'features/stats/screens/stats_screen.dart';
@@ -23,7 +26,14 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  runApp(const MyApp());
+  final themeProvider = ThemeProvider();
+  await themeProvider.loadPreferences();
+  runApp(
+    ChangeNotifierProvider.value(
+      value: themeProvider,
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -100,17 +110,23 @@ class MyApp extends StatelessWidget {
         path: '/profile',
         builder: (context, state) => const ProfileScreen(),
       ),
+      GoRoute(
+        path: '/settings',
+        builder: (context, state) => const SettingsScreen(),
+      ),
     ],
   );
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = context.watch<ThemeProvider>();
+
     return MaterialApp.router(
       title: 'PagePace',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
-      themeMode: ThemeMode.system,
+      themeMode: themeProvider.themeMode,
       routerConfig: _router,
     );
   }

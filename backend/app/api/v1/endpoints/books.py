@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import Annotated, Any
 
+from urllib.parse import quote
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from google.cloud import firestore
@@ -75,11 +77,47 @@ async def create_book(
 
 
 @router.get("/search")
-async def search_books_by_isbn(
+async def search_books(
     uid: Annotated[str, Depends(get_uid)],
-    isbn: str = Query(..., min_length=1),
+    isbn: str | None = Query(None, min_length=1),
+    q: str | None = Query(None, min_length=1),
 ):
     _ = uid
+    if isbn:
+        return await _search_by_isbn(isbn)
+    if q:
+        return await _search_by_title(q)
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail="isbn veya q parametresi gerekli",
+    )
+
+
+def _positive_int(value: Any) -> int | None:
+    if isinstance(value, int) and value > 0:
+        return value
+    if isinstance(value, float) and value > 0:
+        return int(value)
+    return None
+
+
+async def _fetch_pages_by_isbn(client: httpx.AsyncClient, isbn: str) -> int | None:
+    normalized = isbn.replace("-", "").replace(" ", "").strip()
+    if not normalized:
+        return None
+    try:
+        response = await client.get(
+            f"https://openlibrary.org/isbn/{normalized}.json",
+            timeout=10.0,
+        )
+        if response.status_code != 200:
+            return None
+        return _positive_int(response.json().get("number_of_pages"))
+    except httpx.HTTPError:
+        return None
+
+
+async def _search_by_isbn(isbn: str) -> dict[str, Any]:
     url = (
         "https://openlibrary.org/api/books"
         f"?bibkeys=ISBN:{isbn}&format=json&jscmd=data"
@@ -97,12 +135,51 @@ async def search_books_by_isbn(
     cover_url = None
     covers = book_data.get("cover") or {}
     cover_url = covers.get("medium") or covers.get("large") or covers.get("small")
+    if not cover_url:
+        cover_url = f"https://covers.openlibrary.org/b/isbn/{isbn}-M.jpg"
+
+    total_pages = _positive_int(book_data.get("number_of_pages"))
 
     return {
         "title": book_data.get("title"),
         "cover_url": cover_url,
         "isbn": isbn,
+        "total_pages": total_pages,
     }
+
+
+async def _search_by_title(q: str) -> dict[str, Any]:
+    url = f"https://openlibrary.org/search.json?title={quote(q)}&limit=5"
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(url)
+        response.raise_for_status()
+        data = response.json()
+
+        docs = data.get("docs") or []
+        results: list[dict[str, Any]] = []
+        for doc in docs[:5]:
+            cover_i = doc.get("cover_i")
+            cover_url = (
+                f"https://covers.openlibrary.org/b/id/{cover_i}-M.jpg" if cover_i else None
+            )
+            author_names = doc.get("author_name") or []
+            isbn_list = doc.get("isbn") or []
+            isbn = isbn_list[0] if isbn_list else None
+            total_pages = _positive_int(doc.get("number_of_pages_median"))
+            if total_pages is None and isbn:
+                total_pages = await _fetch_pages_by_isbn(client, isbn)
+
+            results.append(
+                {
+                    "title": doc.get("title"),
+                    "author_name": author_names[0] if author_names else None,
+                    "total_pages": total_pages,
+                    "cover_url": cover_url,
+                    "isbn": isbn,
+                }
+            )
+
+    return {"results": results}
 
 
 @router.get("/{book_id}")

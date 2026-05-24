@@ -134,6 +134,24 @@ class ApiService {
     return Map<String, dynamic>.from(response.data ?? {});
   }
 
+  Future<List<Map<String, dynamic>>> searchBooksByTitle(String query) async {
+    final response = await _request(
+      () async => _dio.get<Map<String, dynamic>>(
+        '/api/v1/books/search',
+        queryParameters: {'q': query},
+        options: await _authOptions(),
+      ),
+    );
+    final data = response.data;
+    if (data == null) return [];
+    final results = data['results'];
+    if (results is! List) return [];
+    return results
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
   Future<void> createSession(Map<String, dynamic> data) async {
     await _request(
       () async => _dio.post<Map<String, dynamic>>(

@@ -201,11 +201,13 @@ class _BooksTab extends StatelessWidget {
         final current = (b['currentPage'] as int?) ?? 0;
         final progress = total <= 0 ? 0.0 : (current / total).clamp(0.0, 1.0);
         final cover = Color(((b['coverColor'] as int?) ?? 0xFF6C63FF));
+        final coverUrl = (b['coverUrl'] as String?) ?? '';
 
         return BookListItem(
           title: title,
           progress: progress,
           coverColor: cover,
+          coverUrl: coverUrl,
           onTap: () => context.go('/books/$id'),
         );
       },
