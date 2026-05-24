@@ -2,7 +2,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/services/auth_service.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/pp_button.dart';
 import '../../../shared/widgets/pp_card.dart';
@@ -16,7 +15,6 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  final _authService = AuthService();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -38,13 +36,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _passwordController.dispose();
     _password2Controller.dispose();
     super.dispose();
-  }
-
-  void _showError(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
   }
 
   Future<void> _register() async {
@@ -69,19 +60,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
 
     setState(() => _loading = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final router = GoRouter.of(context);
     try {
-      final credential = await _authService.register(email, p1);
+      final credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
       if (name.isNotEmpty) {
         await credential.user?.updateDisplayName(name);
       }
-      await credential.user?.reload();
-      debugPrint('Register complete, current user: ${credential.user?.email}');
       if (!mounted) return;
-      context.go('/books');
+      router.go('/books');
     } on FirebaseAuthException catch (e) {
-      _showError(_authService.firebaseErrorMessage(e));
-    } catch (_) {
-      _showError('Kayıt oluşturulamadı');
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(e.message ?? 'Kayıt başarısız')),
+      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
