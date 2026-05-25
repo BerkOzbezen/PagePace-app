@@ -111,6 +111,14 @@ class _StatsScreenState extends State<StatsScreen> {
     return days;
   }
 
+  String _motivationMessage(int streak, int totalPages) {
+    if (!_hasAnyData) return 'Okumaya başla, istatistiklerin burada görünecek 📊';
+    if (streak >= 7) return '🏆 Harika gidiyorsun! $streak günlük seri!';
+    if (streak >= 3) return '💪 İyi iş! Seriyi kırma!';
+    if (totalPages >= 100) return '📚 $totalPages sayfa okudun, devam et!';
+    return 'Her gün biraz okumak büyük fark yaratır ✨';
+  }
+
   bool get _hasAnyData {
     final weeklyMinutes = _weekly.any((d) => _readDouble(d['total_minutes']) > 0);
     final yearlyPages = _readInt(_yearly?['total_pages']) > 0;
@@ -181,14 +189,16 @@ class _StatsScreenState extends State<StatsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (!_hasAnyData)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Text(
-                  'Henüz istatistik yok. Okuma oturumu tamamladığında burada görünecek.',
-                  style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+            PPCard(
+              child: Text(
+                _motivationMessage(currentStreak, totalPages),
+                style: AppTextStyles.body.copyWith(
+                  color: scheme.onSurface,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
+            ),
+            const SizedBox(height: 12),
             SizedBox(
               height: 108,
               child: ListView(

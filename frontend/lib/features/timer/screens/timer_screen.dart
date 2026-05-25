@@ -35,7 +35,6 @@ class _TimerScreenState extends State<TimerScreen> {
   _TimerUiState _state = _TimerUiState.idle;
   Timer? _timer;
   Duration _elapsed = Duration.zero;
-  bool _pulse = false;
   DateTime? _sessionStartedAt;
   int? _sessionStartPage;
 
@@ -48,7 +47,8 @@ class _TimerScreenState extends State<TimerScreen> {
     return id;
   }
 
-  Color get _coverColor => Color((currentBook['coverColor'] as int?) ?? 0xFF6C63FF);
+  Color get _coverColor =>
+      Color((currentBook['coverColor'] as int?) ?? 0xFF6C63FF);
   String get _coverUrl => (currentBook['coverUrl'] as String?) ?? '';
 
   @override
@@ -93,13 +93,6 @@ class _TimerScreenState extends State<TimerScreen> {
     }
   }
 
-  void _showSnack(String message) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-    });
-  }
-
   void _start() {
     setState(() {
       _state = _TimerUiState.running;
@@ -120,42 +113,61 @@ class _TimerScreenState extends State<TimerScreen> {
     _startTicker();
   }
 
-  void _resetToIdle() {
-    _timer?.cancel();
-    setState(() {
-      _state = _TimerUiState.idle;
-      _elapsed = Duration.zero;
-      _pulse = false;
-      _sessionStartedAt = null;
-      _sessionStartPage = null;
-    });
-  }
-
   void _startTicker() {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       setState(() {
         _elapsed += const Duration(seconds: 1);
-        _pulse = !_pulse;
       });
     });
   }
 
   String _format(Duration d) {
-    String two(int n) => n.toString().padLeft(2, '0');
-    final h = d.inHours;
-    final m = d.inMinutes.remainder(60);
-    final s = d.inSeconds.remainder(60);
-    return '${two(h)}:${two(m)}:${two(s)}';
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
   }
 
-  String _formatShort(Duration d) {
-    final m = d.inMinutes;
-    final s = d.inSeconds.remainder(60);
-    if (m <= 0) return '$s saniye';
-    if (s == 0) return '$m dakika';
-    return '$m dakika $s saniye';
+  Future<void> _showBookPicker() async {
+    List<Map<String, Object?>> books = [];
+    try {
+      final raw = await _api.getBooks();
+      books = raw.map(bookFromApi).toList(growable: false);
+    } catch (_) {}
+
+    if (books.isEmpty || !mounted) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) {
+        return ListView.builder(
+          shrinkWrap: true,
+          itemCount: books.length,
+          itemBuilder: (_, i) {
+            final book = books[i];
+            final title = (book['title'] as String?) ?? '';
+            final status = (book['status'] as String?) ?? '';
+            final isCurrent = book['id'] == currentBook['id'];
+
+            return ListTile(
+              leading: Icon(
+                Icons.menu_book,
+                color: isCurrent ? AppColors.primary : null,
+              ),
+              title: Text(title),
+              subtitle: Text(status == 'reading' ? 'Okunuyor' : status),
+              selected: isCurrent,
+              onTap: () {
+                setState(() => currentBook = book);
+                Navigator.of(ctx).pop();
+              },
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _finishFlow() async {
@@ -164,113 +176,34 @@ class _TimerScreenState extends State<TimerScreen> {
     final startedAt = _sessionStartedAt;
     final bookId = _bookId;
     final elapsed = _elapsed;
-    final controller = TextEditingController(text: startPage.toString());
 
-    final endPageResult = await showModalBottomSheet<int?>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (sheetContext) {
-        final scheme = Theme.of(sheetContext).colorScheme;
-        var saving = false;
+    if (!mounted) return;
 
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            Future<void> save() async {
-              final endPage = int.tryParse(controller.text.trim());
-              if (endPage == null || endPage <= startPage) {
-                _showSnack('Oturum kaydedilemedi');
-                return;
-              }
-              if (bookId == null) {
-                _showSnack('Oturum kaydedilemedi');
-                return;
-              }
-              if (startedAt == null || elapsed.inSeconds <= 0) {
-                _showSnack('Oturum kaydedilemedi');
-                return;
-              }
-
-              setSheetState(() => saving = true);
-              final endedAt = DateTime.now().toUtc();
-
-              try {
-                await _api.createSession({
-                  'book_id': bookId,
-                  'start_page': startPage,
-                  'end_page': endPage,
-                  'duration_seconds': elapsed.inSeconds,
-                  'started_at': startedAt.toIso8601String(),
-                  'ended_at': endedAt.toIso8601String(),
-                });
-                if (!sheetContext.mounted) return;
-                Navigator.of(sheetContext).pop(endPage);
-              } on ApiException {
-                setSheetState(() => saving = false);
-                _showSnack('Oturum kaydedilemedi');
-              } catch (_) {
-                setSheetState(() => saving = false);
-                _showSnack('Oturum kaydedilemedi');
-              }
-            }
-
-            return Padding(
-              padding: EdgeInsets.only(
-                left: 16,
-                right: 16,
-                top: 8,
-                bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('Kaçıncı sayfadasın?', style: AppTextStyles.h3.copyWith(color: scheme.onSurface)),
-                  const SizedBox(height: 12),
-                  PPTextField(
-                    label: 'Sayfa',
-                    controller: controller,
-                    keyboardType: TextInputType.number,
-                    prefixIcon: Icons.menu_book_outlined,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Geçen süre: ${_formatShort(elapsed)}',
-                    style: AppTextStyles.bodySmall.copyWith(color: scheme.onSurface.withValues(alpha: 0.7)),
-                  ),
-                  const SizedBox(height: 14),
-                  PPButton(
-                    label: saving ? 'Kaydediliyor...' : 'Kaydet',
-                    fullWidth: true,
-                    onPressed: saving ? null : save,
-                  ),
-                  const SizedBox(height: 6),
-                  TextButton(
-                    onPressed: saving ? null : () => Navigator.of(sheetContext).pop(),
-                    child: Text(
-                      'İptal',
-                      style: AppTextStyles.bodySmall.copyWith(color: scheme.onSurface.withValues(alpha: 0.75)),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
+    final result = await Navigator.of(context).push<int>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (ctx) => _SaveSessionPage(
+          startPage: startPage,
+          elapsed: elapsed,
+          bookId: bookId,
+          startedAt: startedAt,
+          api: _api,
+        ),
+      ),
     );
 
-    controller.dispose();
-
-    if (endPageResult == null || !mounted) {
+    if (result == null || !mounted) {
       setState(() => _state = _TimerUiState.paused);
       return;
     }
 
-    setState(() => currentBook['currentPage'] = endPageResult.clamp(0, _totalPages));
-
-    _showSnack('✓ Oturum kaydedildi');
-    _resetToIdle();
+    setState(() {
+      currentBook['currentPage'] = result.clamp(0, _totalPages);
+      _state = _TimerUiState.idle;
+      _elapsed = Duration.zero;
+      _sessionStartedAt = null;
+      _sessionStartPage = null;
+    });
   }
 
   @override
@@ -278,11 +211,14 @@ class _TimerScreenState extends State<TimerScreen> {
     final scheme = Theme.of(context).colorScheme;
 
     final timerStyle = AppTextStyles.h1.copyWith(
-      fontSize: _state == _TimerUiState.running ? 56 : 48,
+      fontSize: _state == _TimerUiState.running ? 40 : 36,
       fontFamily: 'monospace',
-      fontWeight: _state == _TimerUiState.running ? FontWeight.w700 : FontWeight.w600,
+      fontWeight: _state == _TimerUiState.running
+          ? FontWeight.w700
+          : FontWeight.w600,
       color: switch (_state) {
-        _TimerUiState.paused => scheme.onSurface.withValues(alpha: 0.55),
+        _TimerUiState.paused =>
+          scheme.onSurface.withValues(alpha: 0.55),
         _ => scheme.onSurface,
       },
     );
@@ -303,7 +239,6 @@ class _TimerScreenState extends State<TimerScreen> {
           coverUrl: _coverUrl,
           timeText: _format(_elapsed),
           timerStyle: timerStyle,
-          pulseOn: _pulse,
           onPause: _pause,
           onFinish: _finishFlow,
         ),
@@ -316,7 +251,17 @@ class _TimerScreenState extends State<TimerScreen> {
     };
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Okuma Zamanlayıcı')),
+      appBar: AppBar(
+        title: const Text('Okuma Zamanlayıcı'),
+        actions: [
+          if (_state == _TimerUiState.idle)
+            IconButton(
+              icon: const Icon(Icons.swap_horiz),
+              tooltip: 'Kitap Değiştir',
+              onPressed: _showBookPicker,
+            ),
+        ],
+      ),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -367,11 +312,26 @@ class _IdleView extends StatelessWidget {
           iconSize: 56,
         ),
         const SizedBox(height: 14),
-        Text(title, style: AppTextStyles.h2.copyWith(color: scheme.onSurface), textAlign: TextAlign.center),
+        Text(
+          title,
+          style: AppTextStyles.h2.copyWith(color: scheme.onSurface),
+          textAlign: TextAlign.center,
+        ),
         const SizedBox(height: 6),
-        Text(subtitle, style: AppTextStyles.body.copyWith(color: AppColors.textSecondary), textAlign: TextAlign.center),
+        Text(
+          subtitle,
+          style:
+              AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+          textAlign: TextAlign.center,
+        ),
         const SizedBox(height: 18),
-        Text(timeText, style: timerStyle),
+        Text(
+          timeText,
+          style: timerStyle,
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.visible,
+        ),
         const SizedBox(height: 18),
         PPButton(
           label: 'Okumaya Başla',
@@ -391,7 +351,6 @@ class _RunningView extends StatelessWidget {
     required this.coverUrl,
     required this.timeText,
     required this.timerStyle,
-    required this.pulseOn,
     required this.onPause,
     required this.onFinish,
   });
@@ -401,7 +360,6 @@ class _RunningView extends StatelessWidget {
   final String coverUrl;
   final String timeText;
   final TextStyle timerStyle;
-  final bool pulseOn;
   final VoidCallback onPause;
   final VoidCallback onFinish;
 
@@ -427,7 +385,8 @@ class _RunningView extends StatelessWidget {
               Expanded(
                 child: Text(
                   title,
-                  style: AppTextStyles.h3.copyWith(color: scheme.onSurface),
+                  style:
+                      AppTextStyles.h3.copyWith(color: scheme.onSurface),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -436,19 +395,21 @@ class _RunningView extends StatelessWidget {
           ),
         ),
         const Spacer(),
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 650),
-          width: pulseOn ? 220 : 200,
-          height: pulseOn ? 220 : 200,
+        Container(
+          width: 200,
+          height: 200,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(
-              color: AppColors.success.withValues(alpha: pulseOn ? 0.55 : 0.25),
-              width: 10,
-            ),
+            border: Border.all(color: AppColors.success, width: 4),
           ),
           alignment: Alignment.center,
-          child: Text(timeText, style: timerStyle),
+          child: Text(
+            timeText,
+            style: timerStyle,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.visible,
+          ),
         ),
         const Spacer(),
         Row(
@@ -496,9 +457,19 @@ class _PausedView extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(timeText, style: timerStyle),
+        Text(
+          timeText,
+          style: timerStyle,
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.visible,
+        ),
         const SizedBox(height: 8),
-        Text('Duraklatıldı', style: AppTextStyles.body.copyWith(color: scheme.onSurface.withValues(alpha: 0.7))),
+        Text(
+          'Duraklatıldı',
+          style: AppTextStyles.body
+              .copyWith(color: scheme.onSurface.withValues(alpha: 0.7)),
+        ),
         const SizedBox(height: 18),
         Row(
           children: [
@@ -520,6 +491,141 @@ class _PausedView extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+class _SaveSessionPage extends StatefulWidget {
+  const _SaveSessionPage({
+    required this.startPage,
+    required this.elapsed,
+    required this.bookId,
+    required this.startedAt,
+    required this.api,
+  });
+
+  final int startPage;
+  final Duration elapsed;
+  final String? bookId;
+  final DateTime? startedAt;
+  final ApiService api;
+
+  @override
+  State<_SaveSessionPage> createState() => _SaveSessionPageState();
+}
+
+class _SaveSessionPageState extends State<_SaveSessionPage> {
+  late final TextEditingController _controller;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.startPage.toString());
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  String _formatShort(Duration d) {
+    final m = d.inMinutes;
+    final s = d.inSeconds.remainder(60);
+    if (m <= 0) return '$s saniye';
+    if (s == 0) return '$m dakika';
+    return '$m dakika $s saniye';
+  }
+
+  Future<void> _save() async {
+    final endPage = int.tryParse(_controller.text.trim());
+    if (endPage == null || endPage <= widget.startPage) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Mevcut sayfanızdan ${widget.startPage} ileri bir sayfa girin'))
+      );
+      return;
+    }
+    if (widget.bookId == null || widget.startedAt == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Oturum kaydedilemedi')),
+      );
+      return;
+    }
+
+    setState(() => _saving = true);
+    final endedAt = DateTime.now().toUtc();
+
+    try {
+      await widget.api.createSession({
+        'book_id': widget.bookId,
+        'start_page': widget.startPage,
+        'end_page': endPage,
+        'duration_seconds': widget.elapsed.inSeconds,
+        'started_at': widget.startedAt!.toIso8601String(),
+        'ended_at': endedAt.toIso8601String(),
+      });
+      if (!mounted) return;
+      Navigator.of(context).pop(endPage);
+    } on ApiException {
+      setState(() => _saving = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Oturum kaydedilemedi')),
+      );
+    } catch (_) {
+      setState(() => _saving = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Oturum kaydedilemedi')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Oturumu Kaydet'),
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: _saving ? null : () => Navigator.of(context).pop(),
+        ),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Kaçıncı sayfadasın?',
+              style: AppTextStyles.h3.copyWith(color: scheme.onSurface),
+            ),
+            const SizedBox(height: 12),
+            PPTextField(
+              label: 'Sayfa',
+              controller: _controller,
+              keyboardType: TextInputType.number,
+              prefixIcon: Icons.menu_book_outlined,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Geçen süre: ${_formatShort(widget.elapsed)}',
+              style: AppTextStyles.bodySmall.copyWith(
+                color: scheme.onSurface.withValues(alpha: 0.7),
+              ),
+            ),
+            const SizedBox(height: 20),
+            PPButton(
+              label: _saving ? 'Kaydediliyor...' : 'Kaydet',
+              fullWidth: true,
+              onPressed: _saving ? null : _save,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -80,6 +80,39 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     return 0;
   }
 
+  Widget _buildPaceMotivation(ColorScheme scheme) {
+    if (_pace == null) {
+      return Text(
+        'İlk okuma oturumunu başlat!',
+        style: AppTextStyles.body.copyWith(
+          color: AppColors.textSecondary,
+        ),
+        textAlign: TextAlign.center,
+      );
+    }
+
+    final dailyTarget = _pace!['daily_target'];
+    final finishDate = _pace!['estimated_finish_date'];
+
+    if (dailyTarget == null || finishDate == null) {
+      return Text(
+        'İlk okuma oturumunu başlat!',
+        style: AppTextStyles.body.copyWith(
+          color: AppColors.textSecondary,
+        ),
+        textAlign: TextAlign.center,
+      );
+    }
+
+    return Text(
+      'Günde ${_formatPaceNum(dailyTarget)} sayfa okursan $finishDate\'te bitirirsin 🎯',
+      style: AppTextStyles.bodySmall.copyWith(
+        color: scheme.onSurface.withValues(alpha: 0.75),
+      ),
+      textAlign: TextAlign.center,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -190,6 +223,10 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                   ),
           ),
           const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _buildPaceMotivation(scheme),
+          ),
           PPButton(
             label: 'Okumaya Başla',
             fullWidth: true,

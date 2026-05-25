@@ -22,13 +22,13 @@ class _BooksScreenState extends State<BooksScreen> {
   bool _loading = true;
   bool _loadFailed = false;
   List<Map<String, Object?>> _books = [];
+  int _currentStreak = 0;
 
   @override
   void initState() {
     super.initState();
-    debugPrint('Books screen loaded');
-    debugPrint('Current user: ${FirebaseAuth.instance.currentUser?.email}');
     _loadBooks();
+    _loadStreak();
   }
 
   Future<void> _loadBooks() async {
@@ -42,7 +42,6 @@ class _BooksScreenState extends State<BooksScreen> {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
-        debugPrint('Books load aborted: no authenticated user');
         if (!mounted) return;
         setState(() {
           _books = [];
@@ -69,6 +68,17 @@ class _BooksScreenState extends State<BooksScreen> {
         _loadFailed = true;
       });
     }
+  }
+
+  Future<void> _loadStreak() async {
+    try {
+      final streak = await _api.getStreakStats();
+      final current = streak['current_streak'];
+      if (!mounted) return;
+      setState(() {
+        _currentStreak = (current is int) ? current : (current is num ? current.toInt() : 0);
+      });
+    } catch (_) {}
   }
 
   List<Map<String, Object?>> _filtered(String status) => _books
@@ -119,40 +129,60 @@ class _BooksScreenState extends State<BooksScreen> {
                 )
               : _books.isEmpty
                   ? const _EmptyLibraryView()
-                  : DefaultTabController(
-                  length: 3,
-                  child: Column(
-                    children: [
-                      TabBar(
-                        dividerColor: scheme.outline.withValues(alpha: 0.7),
-                        labelStyle: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600),
-                        tabs: const [
-                          Tab(text: 'Okuyor'),
-                          Tab(text: 'Tamamlandı'),
-                          Tab(text: 'Liste'),
-                        ],
-                      ),
-                      Expanded(
-                        child: TabBarView(
-                          children: [
-                            _BooksTab(
-                              books: _filtered('reading'),
-                              emptyLabel: 'Henüz kitap yok',
+                  : Column(
+                      children: [
+                        if (_currentStreak > 0)
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(8),
+                            color: AppColors.primary.withValues(alpha: 0.15),
+                            child: Text(
+                              '🔥 $_currentStreak günlük seri devam ediyor!',
+                              style: AppTextStyles.bodySmall.copyWith(
+                                color: scheme.onSurface,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              textAlign: TextAlign.center,
                             ),
-                            _BooksTab(
-                              books: _filtered('completed'),
-                              emptyLabel: 'Henüz kitap yok',
+                          ),
+                        Expanded(
+                          child: DefaultTabController(
+                            length: 3,
+                            child: Column(
+                              children: [
+                                TabBar(
+                                  dividerColor: scheme.outline.withValues(alpha: 0.7),
+                                  labelStyle: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600),
+                                  tabs: const [
+                                    Tab(text: 'Okuyor'),
+                                    Tab(text: 'Tamamlandı'),
+                                    Tab(text: 'Liste'),
+                                  ],
+                                ),
+                                Expanded(
+                                  child: TabBarView(
+                                    children: [
+                                      _BooksTab(
+                                        books: _filtered('reading'),
+                                        emptyLabel: 'Şu an okuduğun kitap yok',
+                                      ),
+                                      _BooksTab(
+                                        books: _filtered('completed'),
+                                        emptyLabel: 'Henüz tamamlanan kitap yok',
+                                      ),
+                                      _BooksTab(
+                                        books: _filtered('wishlist'),
+                                        emptyLabel: 'İstek listesi boş',
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                            _BooksTab(
-                              books: _filtered('wishlist'),
-                              emptyLabel: 'Henüz kitap yok',
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
+                      ],
+                    ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
           await context.push('/books/add');
@@ -227,13 +257,21 @@ class _EmptyLibraryView extends StatelessWidget {
               const Icon(Icons.menu_book, size: 80, color: AppColors.primary),
               const SizedBox(height: 20),
               Text(
-                'Henüz kitap eklemediniz',
+                'Okuma yolculuğuna başla!',
                 style: AppTextStyles.h3.copyWith(color: scheme.onSurface),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'İlk kitabını ekle ve okuma serini başlat',
+                style: AppTextStyles.body.copyWith(
+                  color: scheme.onSurface.withValues(alpha: 0.7),
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
               PPButton(
-                label: 'İlk kitabınızı ekleyin',
+                label: 'İlk kitabını ekle',
                 fullWidth: true,
                 onPressed: () => context.go('/books/add'),
               ),
