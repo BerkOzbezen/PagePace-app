@@ -17,7 +17,6 @@ class AddBookScreen extends StatefulWidget {
 
 class _AddBookScreenState extends State<AddBookScreen> {
   final _api = ApiService();
-  final _isbnController = TextEditingController();
   final _titleSearchController = TextEditingController();
   final _titleController = TextEditingController();
   final _authorController = TextEditingController();
@@ -25,7 +24,6 @@ class _AddBookScreenState extends State<AddBookScreen> {
 
   int _selectedCoverColor = 0xFF6C63FF;
   bool _saving = false;
-  bool _searching = false;
   bool _searchingTitle = false;
   String _coverUrl = '';
   List<Map<String, dynamic>> _titleSearchResults = [];
@@ -42,9 +40,10 @@ class _AddBookScreenState extends State<AddBookScreen> {
     0xFF1E1E2E,
   ];
 
+  String _isbn = '';
+
   @override
   void dispose() {
-    _isbnController.dispose();
     _titleSearchController.dispose();
     _titleController.dispose();
     _authorController.dispose();
@@ -63,37 +62,6 @@ class _AddBookScreenState extends State<AddBookScreen> {
     if (value is int && value > 0) return value;
     if (value is num && value > 0) return value.toInt();
     return null;
-  }
-
-  Future<void> _autofillFromIsbn() async {
-    final isbn = _isbnController.text.trim();
-    if (isbn.isEmpty) {
-      _showError('ISBN girin');
-      return;
-    }
-
-    setState(() => _searching = true);
-    try {
-      final result = await _api.searchBookByIsbn(isbn);
-      if (!mounted) return;
-      final pages = _readPages(result['total_pages']);
-      setState(() {
-        _titleController.text = result['title'] as String? ?? '';
-        if (pages != null) {
-          _totalPagesController.text = pages.toString();
-        }
-        _coverUrl = result['cover_url'] as String? ??
-            'https://covers.openlibrary.org/b/isbn/$isbn-M.jpg';
-        _titleError = null;
-        _pagesError = null;
-      });
-    } on ApiException catch (e) {
-      _showError(e.message);
-    } catch (_) {
-      _showError('Kitap bilgisi alınamadı');
-    } finally {
-      if (mounted) setState(() => _searching = false);
-    }
   }
 
   Future<void> _searchByTitle() async {
@@ -130,23 +98,24 @@ class _AddBookScreenState extends State<AddBookScreen> {
       _authorController.text = result['author_name'] as String? ?? '';
       if (pages != null) {
         _totalPagesController.text = pages.toString();
+      } else {
+        _totalPagesController.clear();
       }
-      if (isbn != null && isbn.isNotEmpty) {
-        _isbnController.text = isbn;
-      }
+      _isbn = (isbn != null && isbn.isNotEmpty) ? isbn : '';
       _coverUrl = result['cover_url'] as String? ?? '';
       _titleSearchResults = [];
       _titleError = null;
       _pagesError = null;
     });
+    if (pages == null) {
+      _showError('Bu kitabın sayfa sayısı bulunamadı, lütfen manuel girin');
+    }
   }
 
   Future<void> _save() async {
     final title = _titleController.text.trim();
     final pagesText = _totalPagesController.text.trim();
     final pages = int.tryParse(pagesText);
-    final isbn = _isbnController.text.trim();
-
     setState(() {
       _titleError = title.isEmpty ? 'Kitap adı zorunlu' : null;
       _pagesError = (pages == null || pages <= 0) ? 'Toplam sayfa geçersiz' : null;
@@ -160,7 +129,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
       await _api.createBook(
         title: title,
         totalPages: pages!,
-        isbn: isbn.isEmpty ? null : isbn,
+        isbn: _isbn.isEmpty ? null : _isbn,
         coverUrl: _coverUrl.isEmpty ? null : _coverUrl,
       );
       if (!mounted) return;
@@ -177,7 +146,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final busy = _saving || _searching || _searchingTitle;
+    final busy = _saving || _searchingTitle;
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
@@ -204,22 +173,6 @@ class _AddBookScreenState extends State<AddBookScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                PPTextField(
-                  label: 'ISBN',
-                  hint: 'Örn. 978... ',
-                  controller: _isbnController,
-                  keyboardType: TextInputType.number,
-                  textInputAction: TextInputAction.next,
-                  prefixIcon: Icons.qr_code_2,
-                ),
-                const SizedBox(height: 10),
-                PPButton(
-                  label: _searching ? 'Aranıyor...' : 'Otomatik Doldur',
-                  fullWidth: true,
-                  variant: PPButtonVariant.secondary,
-                  onPressed: busy ? null : _autofillFromIsbn,
-                ),
-                const SizedBox(height: 14),
                 PPTextField(
                   label: 'Kitap Adıyla Ara',
                   hint: 'Örn. Dune',

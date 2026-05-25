@@ -124,9 +124,14 @@ class _TimerScreenState extends State<TimerScreen> {
   }
 
   String _format(Duration d) {
-    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$m:$s';
+    String two(int n) => n.toString().padLeft(2, '0');
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60);
+    final s = d.inSeconds.remainder(60);
+    if (h > 0) {
+      return '${two(h)}:${two(m)}:${two(s)}';
+    }
+    return '${two(m)}:${two(s)}';
   }
 
   Future<void> _showBookPicker() async {

@@ -149,7 +149,7 @@ async def _search_by_isbn(isbn: str) -> dict[str, Any]:
 
 
 async def _search_by_title(q: str) -> dict[str, Any]:
-    url = f"https://openlibrary.org/search.json?title={quote(q)}&limit=5"
+    url = f"https://openlibrary.org/search.json?q={quote(q)}&fields=title,author_name,number_of_pages_median,isbn,cover_i&limit=5"
     async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.get(url)
         response.raise_for_status()
@@ -165,10 +165,10 @@ async def _search_by_title(q: str) -> dict[str, Any]:
             author_names = doc.get("author_name") or []
             isbn_list = doc.get("isbn") or []
             isbn = isbn_list[0] if isbn_list else None
-            total_pages = _positive_int(doc.get("number_of_pages_median"))
-            if total_pages is None and isbn:
-                total_pages = await _fetch_pages_by_isbn(client, isbn)
-
+            median_pages = _positive_int(doc.get("number_of_pages_median"))
+            isbn_pages = await _fetch_pages_by_isbn(client, isbn) if isbn else None
+            total_pages = isbn_pages or median_pages
+            print(f"Book: {doc.get('title')}, median_pages: {median_pages}, isbn: {isbn}, isbn_pages: {isbn_pages}")
             results.append(
                 {
                     "title": doc.get("title"),
