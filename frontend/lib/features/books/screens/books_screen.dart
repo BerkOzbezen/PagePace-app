@@ -6,7 +6,9 @@ import '../../../core/services/api_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/utils/book_mapper.dart';
+import '../../../core/exceptions/api_exceptions.dart';
 import '../../../shared/widgets/pp_button.dart';
+import '../../../shared/widgets/pp_card.dart';
 import '../widgets/book_list_item.dart';
 
 class BooksScreen extends StatefulWidget {
@@ -84,6 +86,91 @@ class _BooksScreenState extends State<BooksScreen> {
   List<Map<String, Object?>> _filtered(String status) => _books
       .where((b) => b['status'] == status)
       .toList(growable: false);
+
+  Future<void> _showAiRecommendations() async {
+    if (!mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: SizedBox(
+          height: 80,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ),
+    );
+
+    try {
+      final recommendations = await _api.getAiRecommendations();
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+
+      if (!mounted) return;
+      final scheme = Theme.of(context).colorScheme;
+
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) {
+          return AlertDialog(
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '✨ AI Kitap Önerileri',
+                  style: AppTextStyles.h3.copyWith(color: scheme.onSurface),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Okuma geçmişine göre seçildi',
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: recommendations.isEmpty
+                  ? Text(
+                      'Öneri bulunamadı. Önce kitaplığına kitap ekle.',
+                      style: AppTextStyles.body.copyWith(
+                        color: scheme.onSurface.withValues(alpha: 0.7),
+                      ),
+                    )
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (var i = 0; i < recommendations.length; i++) ...[
+                          if (i > 0) const Divider(height: 24),
+                          _AiRecommendationCard(item: recommendations[i]),
+                        ],
+                      ],
+                    ),
+            ),
+            actionsAlignment: MainAxisAlignment.center,
+            actions: [
+              TextButton(
+                onPressed: () => ctx.pop(),
+                child: const Text('Kapat'),
+              ),
+            ],
+          );
+        },
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('AI önerileri alınamadı')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -165,14 +252,17 @@ class _BooksScreenState extends State<BooksScreen> {
                                       _BooksTab(
                                         books: _filtered('reading'),
                                         emptyLabel: 'Şu an okuduğun kitap yok',
+                                        onAiTap: _showAiRecommendations,
                                       ),
                                       _BooksTab(
                                         books: _filtered('completed'),
                                         emptyLabel: 'Henüz tamamlanan kitap yok',
+                                        onAiTap: _showAiRecommendations,
                                       ),
                                       _BooksTab(
                                         books: _filtered('wishlist'),
                                         emptyLabel: 'İstek listesi boş',
+                                        onAiTap: _showAiRecommendations,
                                       ),
                                     ],
                                   ),
@@ -195,30 +285,40 @@ class _BooksScreenState extends State<BooksScreen> {
 }
 
 class _BooksTab extends StatelessWidget {
-  const _BooksTab({required this.books, required this.emptyLabel});
+  const _BooksTab({
+    required this.books,
+    required this.emptyLabel,
+    required this.onAiTap,
+  });
 
   final List<Map<String, Object?>> books;
   final String emptyLabel;
+  final VoidCallback onAiTap;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
-    if (books.isEmpty) {
-      return Center(
-        child: Text(
-          emptyLabel,
-          style: AppTextStyles.body.copyWith(color: scheme.onSurface.withValues(alpha: 0.7)),
-        ),
-      );
-    }
-
     return ListView.separated(
       padding: const EdgeInsets.all(16),
-      itemCount: books.length,
+      itemCount: books.length + 1 + (books.isEmpty ? 1 : 0),
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, i) {
-        final b = books[i];
+        if (i == 0) {
+          return _AiPromptCard(onTap: onAiTap);
+        }
+
+        if (books.isEmpty) {
+          return Text(
+            emptyLabel,
+            style: AppTextStyles.body.copyWith(
+              color: scheme.onSurface.withValues(alpha: 0.7),
+            ),
+            textAlign: TextAlign.center,
+          );
+        }
+
+        final b = books[i - 1];
         final id = (b['id'] as String?) ?? '';
         final title = (b['title'] as String?) ?? '';
         final total = (b['totalPages'] as int?) ?? 0;
@@ -235,6 +335,61 @@ class _BooksTab extends StatelessWidget {
           onTap: () => context.go('/books/$id'),
         );
       },
+    );
+  }
+}
+
+class _AiPromptCard extends StatelessWidget {
+  const _AiPromptCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Theme(
+      data: Theme.of(context).copyWith(
+        cardTheme: Theme.of(context).cardTheme.copyWith(
+              color: AppColors.primary.withValues(alpha: 0.08),
+            ),
+      ),
+      child: PPCard(
+        onTap: onTap,
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            const Icon(Icons.auto_awesome, color: AppColors.primary, size: 32),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '✨ AI Kitap Önerisi',
+                    style: AppTextStyles.h3.copyWith(
+                      color: scheme.onSurface,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Okuma geçmişine göre kişisel öneriler',
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios,
+              size: 14,
+              color: scheme.onSurface.withValues(alpha: 0.45),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -278,6 +433,55 @@ class _EmptyLibraryView extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _AiRecommendationCard extends StatelessWidget {
+  const _AiRecommendationCard({required this.item});
+
+  final Map<String, dynamic> item;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final title = item['title'] as String? ?? '';
+    final author = item['author'] as String? ?? '';
+    final reason = item['reason'] as String? ?? '';
+
+    return PPCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: AppTextStyles.h3.copyWith(
+              color: scheme.onSurface,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (author.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              author,
+              style: AppTextStyles.caption.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+          if (reason.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              reason,
+              style: AppTextStyles.body.copyWith(
+                color: scheme.onSurface.withValues(alpha: 0.85),
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

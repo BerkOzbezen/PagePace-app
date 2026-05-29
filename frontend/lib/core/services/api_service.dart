@@ -245,6 +245,27 @@ class ApiService {
     return Map<String, dynamic>.from(response.data ?? {});
   }
 
+  Future<List<Map<String, dynamic>>> getAiRecommendations() async {
+    final auth = await _authOptions();
+    final options = auth.copyWith(
+      receiveTimeout: const Duration(seconds: 60),
+    );
+    final response = await _request(
+      () async => _dio.get<Map<String, dynamic>>(
+        '/api/v1/ai/recommend',
+        options: options,
+      ),
+    );
+    final data = response.data;
+    if (data == null) return [];
+    final recommendations = data['recommendations'];
+    if (recommendations is! List) return [];
+    return recommendations
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
   Future<Map<String, dynamic>> getHeatmap() async {
     final response = await _request(
       () async => _dio.get<Map<String, dynamic>>(
