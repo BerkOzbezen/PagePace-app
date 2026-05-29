@@ -21,6 +21,7 @@ class BookCreate(BaseModel):
     total_pages: int = Field(..., gt=0)
     cover_url: str | None = None
     isbn: str | None = None
+    status: str = "reading"
     target_date: datetime | None = None
 
 
@@ -66,7 +67,7 @@ async def create_book(
         "currentPage": 0,
         "coverUrl": body.cover_url,
         "isbn": body.isbn,
-        "status": "reading",
+        "status": body.status,
         "targetDate": body.target_date,
         "addedAt": now,
         "completedAt": None,
@@ -117,6 +118,26 @@ async def _fetch_pages_by_isbn(client: httpx.AsyncClient, isbn: str) -> int | No
         return None
 
 
+def _transliterate_cyrillic(text: str) -> str:
+    mapping = {
+        "А": "A", "Б": "B", "В": "V", "Г": "G", "Д": "D", "Е": "E", "Ё": "Yo",
+        "Ж": "Zh", "З": "Z", "И": "I", "Й": "Y", "К": "K", "Л": "L", "М": "M",
+        "Н": "N", "О": "O", "П": "P", "Р": "R", "С": "S", "Т": "T", "У": "U",
+        "Ф": "F", "Х": "Kh", "Ц": "Ts", "Ч": "Ch", "Ш": "Sh", "Щ": "Shch",
+        "Ъ": "", "Ы": "Y", "Ь": "", "Э": "E", "Ю": "Yu", "Я": "Ya",
+        "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "yo",
+        "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m",
+        "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u",
+        "ф": "f", "х": "kh", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "shch",
+        "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya",
+    }
+    return "".join(mapping.get(c, c) for c in text)
+
+
+def _is_cyrillic(text: str) -> bool:
+    return any("\u0400" <= c <= "\u04FF" for c in text)
+
+
 async def _search_by_isbn(isbn: str) -> dict[str, Any]:
     url = (
         "https://openlibrary.org/api/books"
@@ -163,6 +184,14 @@ async def _search_by_title(q: str) -> dict[str, Any]:
                 f"https://covers.openlibrary.org/b/id/{cover_i}-M.jpg" if cover_i else None
             )
             author_names = doc.get("author_name") or []
+            latin_authors = [a for a in author_names if a and all(ord(c) < 1024 for c in a)]
+            author = (
+                latin_authors[0]
+                if latin_authors
+                else (author_names[0] if author_names else None)
+            )
+            if author and _is_cyrillic(author):
+                author = _transliterate_cyrillic(author)
             isbn_list = doc.get("isbn") or []
             isbn = isbn_list[0] if isbn_list else None
             median_pages = _positive_int(doc.get("number_of_pages_median"))
@@ -172,7 +201,7 @@ async def _search_by_title(q: str) -> dict[str, Any]:
             results.append(
                 {
                     "title": doc.get("title"),
-                    "author_name": author_names[0] if author_names else None,
+                    "author_name": author,
                     "total_pages": total_pages,
                     "cover_url": cover_url,
                     "isbn": isbn,

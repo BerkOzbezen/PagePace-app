@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../core/exceptions/api_exceptions.dart';
+import '../../../core/services/active_book_prefs.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -63,21 +64,44 @@ class _TimerScreenState extends State<TimerScreen> {
     super.dispose();
   }
 
+  Future<void> _setActiveBook(Map<String, Object?> book) async {
+    setState(() => currentBook = book);
+    final id = book['id'] as String?;
+    if (id != null && id.isNotEmpty) {
+      await ActiveBookPrefs.saveActiveBookId(id);
+    }
+  }
+
   Future<void> _loadActiveBook() async {
     try {
       final raw = await _api.getBooks();
       final books = raw.map(bookFromApi).toList(growable: false);
       if (books.isEmpty || !mounted) return;
 
+      final savedId = await ActiveBookPrefs.loadActiveBookId();
       Map<String, Object?>? active;
-      for (final book in books) {
-        if (book['status'] == 'reading') {
-          active = book;
-          break;
+
+      if (savedId != null && savedId.isNotEmpty) {
+        for (final book in books) {
+          if (book['id'] == savedId) {
+            active = book;
+            break;
+          }
         }
       }
+
+      if (active == null) {
+        for (final book in books) {
+          if (book['status'] == 'reading') {
+            active = book;
+            break;
+          }
+        }
+      }
+
       active ??= books.first;
 
+      if (!mounted) return;
       setState(() => currentBook = active!);
     } catch (_) {
       if (!mounted) return;
@@ -164,9 +188,9 @@ class _TimerScreenState extends State<TimerScreen> {
               title: Text(title),
               subtitle: Text(status == 'reading' ? 'Okunuyor' : status),
               selected: isCurrent,
-              onTap: () {
-                setState(() => currentBook = book);
-                Navigator.of(ctx).pop();
+              onTap: () async {
+                await _setActiveBook(book);
+                if (ctx.mounted) Navigator.of(ctx).pop();
               },
             );
           },

@@ -252,17 +252,16 @@ class _BooksScreenState extends State<BooksScreen> {
                                       _BooksTab(
                                         books: _filtered('reading'),
                                         emptyLabel: 'Şu an okuduğun kitap yok',
+                                        showAiCard: true,
                                         onAiTap: _showAiRecommendations,
                                       ),
                                       _BooksTab(
                                         books: _filtered('completed'),
                                         emptyLabel: 'Henüz tamamlanan kitap yok',
-                                        onAiTap: _showAiRecommendations,
                                       ),
                                       _BooksTab(
                                         books: _filtered('wishlist'),
                                         emptyLabel: 'İstek listesi boş',
-                                        onAiTap: _showAiRecommendations,
                                       ),
                                     ],
                                   ),
@@ -288,24 +287,41 @@ class _BooksTab extends StatelessWidget {
   const _BooksTab({
     required this.books,
     required this.emptyLabel,
-    required this.onAiTap,
+    this.showAiCard = false,
+    this.onAiTap,
   });
 
   final List<Map<String, Object?>> books;
   final String emptyLabel;
-  final VoidCallback onAiTap;
+  final bool showAiCard;
+  final VoidCallback? onAiTap;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
+    if (!showAiCard && books.isEmpty) {
+      return Center(
+        child: Text(
+          emptyLabel,
+          style: AppTextStyles.body.copyWith(
+            color: scheme.onSurface.withValues(alpha: 0.7),
+          ),
+        ),
+      );
+    }
+
+    final itemCount = books.length +
+        (showAiCard ? 1 : 0) +
+        (books.isEmpty ? 1 : 0);
+
     return ListView.separated(
       padding: const EdgeInsets.all(16),
-      itemCount: books.length + 1 + (books.isEmpty ? 1 : 0),
+      itemCount: itemCount,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, i) {
-        if (i == 0) {
-          return _AiPromptCard(onTap: onAiTap);
+        if (showAiCard && i == 0) {
+          return _AiPromptCard(onTap: onAiTap!);
         }
 
         if (books.isEmpty) {
@@ -318,7 +334,8 @@ class _BooksTab extends StatelessWidget {
           );
         }
 
-        final b = books[i - 1];
+        final bookIndex = showAiCard ? i - 1 : i;
+        final b = books[bookIndex];
         final id = (b['id'] as String?) ?? '';
         final title = (b['title'] as String?) ?? '';
         final total = (b['totalPages'] as int?) ?? 0;
@@ -326,12 +343,14 @@ class _BooksTab extends StatelessWidget {
         final progress = total <= 0 ? 0.0 : (current / total).clamp(0.0, 1.0);
         final cover = Color(((b['coverColor'] as int?) ?? 0xFF6C63FF));
         final coverUrl = (b['coverUrl'] as String?) ?? '';
+        final status = (b['status'] as String?) ?? 'reading';
 
         return BookListItem(
           title: title,
           progress: progress,
           coverColor: cover,
           coverUrl: coverUrl,
+          status: status,
           onTap: () => context.go('/books/$id'),
         );
       },

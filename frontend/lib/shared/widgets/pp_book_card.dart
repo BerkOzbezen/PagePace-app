@@ -10,6 +10,7 @@ class PPBookCard extends StatelessWidget {
     required this.progress,
     this.coverColor,
     this.coverUrl = '',
+    this.status = 'reading',
     this.onTap,
   });
 
@@ -17,6 +18,7 @@ class PPBookCard extends StatelessWidget {
   final double progress;
   final Color? coverColor;
   final String coverUrl;
+  final String status;
   final VoidCallback? onTap;
 
   static Color colorForProgress(int percent) {
@@ -28,6 +30,7 @@ class PPBookCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isWishlist = status == 'wishlist';
     final clamped = progress.clamp(0.0, 1.0);
     final percent = (clamped * 100).round();
     final barColor = colorForProgress(percent);
@@ -70,30 +73,47 @@ class PPBookCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(999),
-                              child: LinearProgressIndicator(
-                                value: clamped,
-                                backgroundColor: scheme.outline.withValues(alpha: 0.35),
-                                color: barColor,
-                                minHeight: 6,
-                              ),
-                            ),
+                      if (isWishlist) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: scheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          const SizedBox(width: 10),
-                          Text(
-                            '$percent%',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: barColor,
-                                  fontWeight: FontWeight.w700,
+                          child: Text(
+                            '📚 Listede',
+                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                  color: scheme.onSurface.withValues(alpha: 0.55),
                                 ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ] else ...[
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(999),
+                                child: LinearProgressIndicator(
+                                  value: clamped,
+                                  backgroundColor: scheme.outline.withValues(alpha: 0.35),
+                                  color: barColor,
+                                  minHeight: 6,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              '$percent%',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: barColor,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),

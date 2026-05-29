@@ -30,6 +30,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
 
   String? _titleError;
   String? _pagesError;
+  String _status = 'reading';
 
   final _colors = const [
     0xFF6C63FF,
@@ -131,6 +132,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
         totalPages: pages!,
         isbn: _isbn.isEmpty ? null : _isbn,
         coverUrl: _coverUrl.isEmpty ? null : _coverUrl,
+        status: _status,
       );
       if (!mounted) return;
       navigator.pop();
@@ -240,6 +242,33 @@ class _AddBookScreenState extends State<AddBookScreen> {
                   errorText: _pagesError,
                   prefixIcon: Icons.format_list_numbered,
                   onChanged: (_) => setState(() => _pagesError = null),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'Durum',
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: scheme.onSurface.withValues(alpha: 0.75),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(
+                      value: 'reading',
+                      label: Text('Şu an okuyorum'),
+                    ),
+                    ButtonSegment(
+                      value: 'wishlist',
+                      label: Text('Okumak istiyorum'),
+                    ),
+                  ],
+                  selected: {_status},
+                  onSelectionChanged: busy
+                      ? null
+                      : (selection) {
+                          if (selection.isEmpty) return;
+                          setState(() => _status = selection.first);
+                        },
                 ),
                 const SizedBox(height: 14),
                 Text(

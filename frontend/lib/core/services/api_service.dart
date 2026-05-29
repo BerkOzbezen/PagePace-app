@@ -107,6 +107,7 @@ class ApiService {
     required int totalPages,
     String? isbn,
     String? coverUrl,
+    String status = 'reading',
   }) async {
     final response = await _request(
       () async => _dio.post<Map<String, dynamic>>(
@@ -114,6 +115,7 @@ class ApiService {
         data: {
           'title': title,
           'total_pages': totalPages,
+          'status': status,
           if (isbn != null && isbn.isNotEmpty) 'isbn': isbn,
           if (coverUrl != null) 'cover_url': coverUrl,
         },
@@ -160,6 +162,22 @@ class ApiService {
         options: await _authOptions(),
       ),
     );
+  }
+
+  Future<Map<String, dynamic>> updateBook(
+    String id, {
+    String? status,
+  }) async {
+    final response = await _request(
+      () async => _dio.put<Map<String, dynamic>>(
+        '/api/v1/books/$id',
+        data: {
+          if (status != null) 'status': status,
+        },
+        options: await _authOptions(),
+      ),
+    );
+    return Map<String, dynamic>.from(response.data ?? {});
   }
 
   Future<Map<String, dynamic>> getBook(String id) async {

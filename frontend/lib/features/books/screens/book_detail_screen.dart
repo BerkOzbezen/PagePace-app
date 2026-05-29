@@ -2,6 +2,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/exceptions/api_exceptions.dart';
+import '../../../core/services/active_book_prefs.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -24,6 +26,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   Map<String, dynamic>? _pace;
   List<Map<String, dynamic>> _sessions = [];
   bool _loading = true;
+  bool _updatingStatus = false;
 
   @override
   void initState() {
@@ -66,6 +69,31 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     if (value is! num) return '-';
     if (fractionDigits == 0) return value.round().toString();
     return value.toStringAsFixed(fractionDigits);
+  }
+
+  Future<void> _startReading() async {
+    if (_updatingStatus) return;
+    setState(() => _updatingStatus = true);
+    try {
+      await _api.updateBook(widget.bookId, status: 'reading');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Kitap okuma listesine eklendi!')),
+      );
+      context.go('/books');
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Durum güncellenemedi')),
+      );
+    } finally {
+      if (mounted) setState(() => _updatingStatus = false);
+    }
   }
 
   String _formatSessionDate(dynamic startedAt) {
@@ -139,6 +167,8 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     final currentPage = (_book?['currentPage'] as int?) ?? 0;
     final progress = totalPages > 0 ? currentPage / totalPages : 0.0;
     final percent = (progress * 100).round();
+    final status = (_book?['status'] as String?) ?? 'reading';
+    final isWishlist = status == 'wishlist';
 
     return Scaffold(
       appBar: AppBar(
@@ -147,6 +177,14 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
         ),
+        actions: isWishlist
+            ? [
+                TextButton(
+                  onPressed: _updatingStatus ? null : _startReading,
+                  child: Text(_updatingStatus ? 'Ekleniyor...' : 'Okumaya Başla'),
+                ),
+              ]
+            : null,
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -227,11 +265,16 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
             padding: const EdgeInsets.only(bottom: 8),
             child: _buildPaceMotivation(scheme),
           ),
-          PPButton(
-            label: 'Okumaya Başla',
-            fullWidth: true,
-            onPressed: () => context.go('/timer'),
-          ),
+          if (!isWishlist)
+            PPButton(
+              label: 'Okumaya Başla',
+              fullWidth: true,
+              onPressed: () async {
+                await ActiveBookPrefs.saveActiveBookId(widget.bookId);
+                if (!context.mounted) return;
+                context.go('/timer');
+              },
+            ),
           const SizedBox(height: 18),
           Text(
             'Oturum Geçmişi',

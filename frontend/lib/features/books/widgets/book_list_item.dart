@@ -9,6 +9,7 @@ class BookListItem extends StatelessWidget {
     required this.progress,
     required this.coverColor,
     this.coverUrl = '',
+    this.status = 'reading',
     this.onTap,
   });
 
@@ -16,6 +17,7 @@ class BookListItem extends StatelessWidget {
   final double progress;
   final Color coverColor;
   final String coverUrl;
+  final String status;
   final VoidCallback? onTap;
 
   @override
@@ -25,6 +27,7 @@ class BookListItem extends StatelessWidget {
       progress: progress,
       coverColor: coverColor,
       coverUrl: coverUrl,
+      status: status,
       onTap: onTap,
     );
   }
