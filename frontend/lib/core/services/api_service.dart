@@ -17,7 +17,7 @@ class ApiService {
               ),
             );
 
-  static const String baseUrl = 'http://192.168.1.236:8000';
+  static const String baseUrl = 'https://pagepace-app-production.up.railway.app';
 
   final Dio _dio;
   final FirebaseAuth _auth;
