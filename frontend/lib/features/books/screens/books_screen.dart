@@ -18,9 +18,10 @@ class BooksScreen extends StatefulWidget {
   State<BooksScreen> createState() => _BooksScreenState();
 }
 
-class _BooksScreenState extends State<BooksScreen> {
+class _BooksScreenState extends State<BooksScreen> with SingleTickerProviderStateMixin {
   final _api = ApiService();
 
+  late TabController _tabController;
   bool _loading = true;
   bool _loadFailed = false;
   List<Map<String, Object?>> _books = [];
@@ -29,8 +30,15 @@ class _BooksScreenState extends State<BooksScreen> {
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this, initialIndex: 0);
     _loadBooks();
     _loadStreak();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadBooks() async {
@@ -206,16 +214,49 @@ class _BooksScreenState extends State<BooksScreen> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? RefreshIndicator(
+              onRefresh: _loadBooks,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  SizedBox(
+                    height: MediaQuery.sizeOf(context).height * 0.65,
+                    child: const Center(child: CircularProgressIndicator()),
+                  ),
+                ],
+              ),
+            )
           : _loadFailed
-              ? Center(
-                  child: Text(
-                    'Yüklenemedi',
-                    style: AppTextStyles.h3.copyWith(color: scheme.onSurface),
+              ? RefreshIndicator(
+                  onRefresh: _loadBooks,
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: [
+                      SizedBox(
+                        height: MediaQuery.sizeOf(context).height * 0.65,
+                        child: Center(
+                          child: Text(
+                            'Yüklenemedi',
+                            style: AppTextStyles.h3.copyWith(color: scheme.onSurface),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 )
               : _books.isEmpty
-                  ? const _EmptyLibraryView()
+                  ? RefreshIndicator(
+                      onRefresh: _loadBooks,
+                      child: ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        children: [
+                          SizedBox(
+                            height: MediaQuery.sizeOf(context).height * 0.65,
+                            child: const _EmptyLibraryView(),
+                          ),
+                        ],
+                      ),
+                    )
                   : Column(
                       children: [
                         if (_currentStreak > 0)
@@ -233,35 +274,38 @@ class _BooksScreenState extends State<BooksScreen> {
                             ),
                           ),
                         Expanded(
-                          child: DefaultTabController(
-                            length: 3,
-                            child: Column(
-                              children: [
-                                TabBar(
-                                  dividerColor: scheme.outline.withValues(alpha: 0.7),
-                                  labelStyle: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600),
-                                  tabs: const [
-                                    Tab(text: 'Okuyor'),
-                                    Tab(text: 'Tamamlandı'),
-                                    Tab(text: 'Liste'),
-                                  ],
-                                ),
-                                Expanded(
-                                  child: TabBarView(
-                                    children: [
+                          child: Column(
+                            children: [
+                              TabBar(
+                                controller: _tabController,
+                                dividerColor: scheme.outline.withValues(alpha: 0.7),
+                                labelStyle: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600),
+                                tabs: const [
+                                  Tab(text: 'Okuyor'),
+                                  Tab(text: 'Tamamlandı'),
+                                  Tab(text: 'Liste'),
+                                ],
+                              ),
+                              Expanded(
+                                child: TabBarView(
+                                  controller: _tabController,
+                                  children: [
                                       _BooksTab(
                                         books: _filtered('reading'),
                                         emptyLabel: 'Şu an okuduğun kitap yok',
                                         showAiCard: true,
                                         onAiTap: _showAiRecommendations,
+                                        onRefresh: _loadBooks,
                                       ),
                                       _BooksTab(
                                         books: _filtered('completed'),
                                         emptyLabel: 'Henüz tamamlanan kitap yok',
+                                        onRefresh: _loadBooks,
                                       ),
                                       _BooksTab(
                                         books: _filtered('wishlist'),
                                         emptyLabel: 'İstek listesi boş',
+                                        onRefresh: _loadBooks,
                                       ),
                                     ],
                                   ),
@@ -269,7 +313,6 @@ class _BooksScreenState extends State<BooksScreen> {
                               ],
                             ),
                           ),
-                        ),
                       ],
                     ),
       floatingActionButton: FloatingActionButton(
@@ -287,12 +330,14 @@ class _BooksTab extends StatelessWidget {
   const _BooksTab({
     required this.books,
     required this.emptyLabel,
+    required this.onRefresh,
     this.showAiCard = false,
     this.onAiTap,
   });
 
   final List<Map<String, Object?>> books;
   final String emptyLabel;
+  final Future<void> Function() onRefresh;
   final bool showAiCard;
   final VoidCallback? onAiTap;
 
@@ -301,12 +346,27 @@ class _BooksTab extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
 
     if (!showAiCard && books.isEmpty) {
-      return Center(
-        child: Text(
-          emptyLabel,
-          style: AppTextStyles.body.copyWith(
-            color: scheme.onSurface.withValues(alpha: 0.7),
-          ),
+      return RefreshIndicator(
+        onRefresh: onRefresh,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                SizedBox(
+                  height: constraints.maxHeight,
+                  child: Center(
+                    child: Text(
+                      emptyLabel,
+                      style: AppTextStyles.body.copyWith(
+                        color: scheme.onSurface.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       );
     }
@@ -315,7 +375,10 @@ class _BooksTab extends StatelessWidget {
         (showAiCard ? 1 : 0) +
         (books.isEmpty ? 1 : 0);
 
-    return ListView.separated(
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: ListView.separated(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       itemCount: itemCount,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
@@ -354,6 +417,7 @@ class _BooksTab extends StatelessWidget {
           onTap: () => context.go('/books/$id'),
         );
       },
+    ),
     );
   }
 }

@@ -76,11 +76,10 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     setState(() => _updatingStatus = true);
     try {
       await _api.updateBook(widget.bookId, status: 'reading');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kitap okuma listesine eklendi!')),
-      );
-      context.go('/books');
+      if (context.mounted) {
+        // ignore: use_build_context_synchronously
+        context.go('/books');
+      }
     } on ApiException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -181,7 +180,13 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
             ? [
                 TextButton(
                   onPressed: _updatingStatus ? null : _startReading,
-                  child: Text(_updatingStatus ? 'Ekleniyor...' : 'Okumaya Başla'),
+                  child: _updatingStatus
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Okumaya Başla'),
                 ),
               ]
             : null,
