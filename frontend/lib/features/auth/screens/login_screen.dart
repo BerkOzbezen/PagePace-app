@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/services/api_service.dart';
 import '../../../core/services/auth_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -18,6 +19,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _authService = AuthService();
+  final _api = ApiService();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
@@ -40,6 +42,20 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  Future<void> _syncProfile() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final email = user.email;
+    if (email == null || email.isEmpty) return;
+    final displayName = user.displayName?.trim();
+    await _api.saveUserProfile(
+      displayName: (displayName != null && displayName.isNotEmpty)
+          ? displayName
+          : email.split('@').first,
+      email: email,
+    );
+  }
+
   Future<void> _signIn() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
@@ -57,6 +73,7 @@ class _LoginScreenState extends State<LoginScreen> {
         email: email,
         password: password,
       );
+      await _syncProfile();
       if (!mounted) return;
       context.go('/books');
     } on FirebaseAuthException catch (e) {
@@ -72,6 +89,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _loading = true);
     try {
       await _authService.signInWithGoogle();
+      await _syncProfile();
       if (!mounted) return;
       context.go('/books');
     } on FirebaseAuthException catch (e) {

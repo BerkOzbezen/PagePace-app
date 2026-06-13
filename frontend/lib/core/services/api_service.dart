@@ -40,6 +40,8 @@ class ApiService {
         throw NotFoundException(message);
       case 422:
         throw ValidationException(message, details: response?.data);
+      case 409:
+        throw ApiException(message);
       default:
         throw ApiException(message);
     }
@@ -71,7 +73,7 @@ class ApiService {
         'data=${e.response?.data} message=${e.message}',
       );
       final statusCode = e.response?.statusCode;
-      if (statusCode == 401 || statusCode == 404 || statusCode == 422) {
+      if (statusCode == 401 || statusCode == 404 || statusCode == 422 || statusCode == 409) {
         _throwFromResponse(e.response);
       }
       final message = _extractDetail(e.response?.data) ?? e.message ?? 'Bağlantı hatası';
@@ -292,5 +294,81 @@ class ApiService {
       ),
     );
     return Map<String, dynamic>.from(response.data ?? {});
+  }
+
+  Future<void> saveUserProfile({
+    required String displayName,
+    required String email,
+  }) async {
+    await _request(
+      () async => _dio.post<Map<String, dynamic>>(
+        '/api/v1/users/profile',
+        data: {
+          'display_name': displayName,
+          'email': email,
+        },
+        options: await _authOptions(),
+      ),
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getFriends() async {
+    final response = await _request(
+      () async => _dio.get<Map<String, dynamic>>(
+        '/api/v1/friends',
+        options: await _authOptions(),
+      ),
+    );
+    final friends = response.data?['friends'];
+    if (friends is! List) return [];
+    return friends
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  Future<void> sendFriendRequest(String email) async {
+    await _request(
+      () async => _dio.post<Map<String, dynamic>>(
+        '/api/v1/friends/request',
+        data: {'email': email},
+        options: await _authOptions(),
+      ),
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getFriendRequests() async {
+    final response = await _request(
+      () async => _dio.get<Map<String, dynamic>>(
+        '/api/v1/friends/requests',
+        options: await _authOptions(),
+      ),
+    );
+    final requests = response.data?['requests'];
+    if (requests is! List) return [];
+    return requests
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  Future<void> acceptFriendRequest(String senderUid) async {
+    await _request(
+      () async => _dio.post<Map<String, dynamic>>(
+        '/api/v1/friends/accept',
+        data: {'sender_uid': senderUid},
+        options: await _authOptions(),
+      ),
+    );
+  }
+
+  Future<void> rejectFriendRequest(String senderUid) async {
+    await _request(
+      () async => _dio.post<Map<String, dynamic>>(
+        '/api/v1/friends/reject',
+        data: {'sender_uid': senderUid},
+        options: await _authOptions(),
+      ),
+    );
   }
 }

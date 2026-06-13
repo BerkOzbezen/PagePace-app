@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/services/api_service.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/pp_button.dart';
 import '../../../shared/widgets/pp_card.dart';
@@ -15,6 +16,7 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
+  final _api = ApiService();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -70,6 +72,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (name.isNotEmpty) {
         await credential.user?.updateDisplayName(name);
       }
+      await _api.saveUserProfile(displayName: name, email: email);
       if (!mounted) return;
       router.go('/books');
     } on FirebaseAuthException catch (e) {

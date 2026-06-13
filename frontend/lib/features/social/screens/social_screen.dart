@@ -1,50 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/exceptions/api_exceptions.dart';
+import '../../../core/services/api_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/utils/book_mapper.dart';
 import '../../../shared/widgets/pp_button.dart';
 import '../../../shared/widgets/pp_card.dart';
 import '../../../shared/widgets/pp_text_field.dart';
-import '../widgets/friend_card.dart';
-
-final mockFriends = [
-  {
-    'id': '1',
-    'name': 'Ahmet Yılmaz',
-    'weeklyPages': 124,
-    'streak': 8,
-    'totalBooks': 12,
-    'avatarColor': 0xFF6C63FF,
-  },
-  {
-    'id': '2',
-    'name': 'Zeynep Kaya',
-    'weeklyPages': 89,
-    'streak': 15,
-    'totalBooks': 24,
-    'avatarColor': 0xFF22C55E,
-  },
-  {
-    'id': '3',
-    'name': 'Mert Demir',
-    'weeklyPages': 210,
-    'streak': 3,
-    'totalBooks': 7,
-    'avatarColor': 0xFFF59E0B,
-  },
-];
-
-final mockRequests = [
-  {
-    'id': '4',
-    'name': 'Elif Şahin',
-    'avatarColor': 0xFFEF4444,
-  },
-];
-
-const myWeeklyPages = 156;
-const myStreak = 5;
 
 class SocialScreen extends StatefulWidget {
   const SocialScreen({super.key});
@@ -54,26 +18,39 @@ class SocialScreen extends StatefulWidget {
 }
 
 class _SocialScreenState extends State<SocialScreen> {
-  late List<Map<String, Object?>> _requests;
-  final Set<String> _sentRequests = <String>{};
-  final _searchController = TextEditingController();
+  final _api = ApiService();
+
+  bool _loading = true;
+  List<Map<String, dynamic>> _friends = [];
+  List<Map<String, dynamic>> _requests = [];
 
   @override
   void initState() {
     super.initState();
-    _requests = mockRequests.cast<Map<String, Object?>>().map((e) => Map<String, Object?>.from(e)).toList();
+    _load();
   }
 
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  Map<String, Object?> _topFriend() {
-    final friends = mockFriends.cast<Map<String, Object?>>();
-    friends.sort((a, b) => ((b['weeklyPages'] as int? ?? 0)).compareTo((a['weeklyPages'] as int? ?? 0)));
-    return friends.isEmpty ? const {} : friends.first;
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final results = await Future.wait([
+        _api.getFriends(),
+        _api.getFriendRequests(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _friends = results[0];
+        _requests = results[1];
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _friends = [];
+        _requests = [];
+        _loading = false;
+      });
+    }
   }
 
   String _initials(String name) {
@@ -83,277 +60,263 @@ class _SocialScreenState extends State<SocialScreen> {
     return '${parts.first.characters.take(1).toString().toUpperCase()}${parts.last.characters.take(1).toString().toUpperCase()}';
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final top = _topFriend();
-    final topName = (top['name'] as String?) ?? '—';
-    final topWeekly = (top['weeklyPages'] as int?) ?? 0;
-    final topStreak = (top['streak'] as int?) ?? 0;
-    final topColor = Color((top['avatarColor'] as int?) ?? 0xFF6C63FF);
+  int _readInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return 0;
+  }
 
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Sosyal'),
-          actions: [
-            IconButton(
-              tooltip: 'Ara',
-              onPressed: () {},
-              icon: const Icon(Icons.search),
-            ),
-          ],
-          bottom: TabBar(
-            labelStyle: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600),
-            tabs: const [
-              Tab(text: 'Arkadaşlar'),
-              Tab(text: 'İstekler'),
-              Tab(text: 'Keşfet'),
-            ],
+  Future<void> _showAddFriendDialog() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final controller = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Arkadaş Ekle'),
+          content: PPTextField(
+            label: 'E-posta',
+            hint: 'ornek@mail.com',
+            controller: controller,
+            keyboardType: TextInputType.emailAddress,
+            prefixIcon: Icons.email_outlined,
           ),
-        ),
-        body: TabBarView(
-          children: [
-            // Friends
-            ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                PPCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Bu Hafta', style: AppTextStyles.h3.copyWith(color: scheme.onSurface)),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _CompareTile(
-                              name: 'Sen',
-                              pages: myWeeklyPages,
-                              streak: myStreak,
-                              color: AppColors.primary,
-                              initials: 'ME',
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _CompareTile(
-                              name: topName.split(' ').first,
-                              pages: topWeekly,
-                              streak: topStreak,
-                              color: topColor,
-                              initials: _initials(topName),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                ...mockFriends.cast<Map<String, Object?>>().map((f) {
-                  final id = (f['id'] as String?) ?? '';
-                  final name = (f['name'] as String?) ?? '';
-                  final weekly = (f['weeklyPages'] as int?) ?? 0;
-                  final streak = (f['streak'] as int?) ?? 0;
-                  final color = Color((f['avatarColor'] as int?) ?? 0xFF6C63FF);
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: FriendCard(
-                      name: name,
-                      weeklyPages: weekly,
-                      streak: streak,
-                      avatarColor: color,
-                      onTap: () => context.go('/social/$id'),
-                    ),
-                  );
-                }),
-              ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('İptal'),
             ),
-
-            // Requests
-            ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                if (_requests.isEmpty)
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 40),
-                      child: Text(
-                        'Bekleyen istek yok',
-                        style: AppTextStyles.body.copyWith(color: scheme.onSurface.withValues(alpha: 0.7)),
-                      ),
-                    ),
-                  )
-                else
-                  ..._requests.map((r) {
-                    final id = (r['id'] as String?) ?? '';
-                    final name = (r['name'] as String?) ?? '';
-                    final color = Color((r['avatarColor'] as int?) ?? 0xFF6C63FF);
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: PPCard(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          children: [
-                            Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 22,
-                                  backgroundColor: color,
-                                  child: Text(
-                                    _initials(name),
-                                    style: AppTextStyles.body.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    name,
-                                    style: AppTextStyles.body.copyWith(color: scheme.onSurface, fontWeight: FontWeight.w600),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: PPButton(
-                                    label: 'Kabul Et',
-                                    onPressed: () => setState(() => _requests.removeWhere((e) => e['id'] == id)),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: PPButton(
-                                    label: 'Reddet',
-                                    variant: PPButtonVariant.secondary,
-                                    onPressed: () => setState(() => _requests.removeWhere((e) => e['id'] == id)),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }),
-              ],
-            ),
-
-            // Explore
-            ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                PPTextField(
-                  label: 'Ara',
-                  hint: 'Kullanıcı adı ara...',
-                  controller: _searchController,
-                  prefixIcon: Icons.search,
-                  onChanged: (_) => setState(() {}),
-                ),
-                const SizedBox(height: 12),
-                ...const [
-                  {'name': 'Can Öztürk', 'avatarColor': 0xFF6C63FF},
-                  {'name': 'Selin Arslan', 'avatarColor': 0xFF22C55E},
-                ].map((u) {
-                  final name = u['name'] as String;
-                  final color = Color(u['avatarColor'] as int);
-                  final sent = _sentRequests.contains(name);
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: PPCard(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 22,
-                            backgroundColor: color,
-                            child: Text(
-                              _initials(name),
-                              style: AppTextStyles.body.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(name, style: AppTextStyles.body.copyWith(color: scheme.onSurface, fontWeight: FontWeight.w600)),
-                          ),
-                          PPButton(
-                            label: sent ? 'İstek Gönderildi ✓' : 'Arkadaş Ekle',
-                            variant: PPButtonVariant.secondary,
-                            onPressed: sent ? null : () => setState(() => _sentRequests.add(name)),
-                          ),
-                        ],
-                      ),
-                    ),
+            TextButton(
+              onPressed: () async {
+                final email = controller.text.trim();
+                if (email.isEmpty) return;
+                Navigator.of(ctx).pop();
+                try {
+                  await _api.sendFriendRequest(email);
+                  messenger.showSnackBar(
+                    const SnackBar(content: Text('Arkadaşlık isteği gönderildi!')),
                   );
-                }),
-              ],
+                  _load();
+                } catch (e) {
+                  messenger.showSnackBar(
+                    SnackBar(content: Text('Hata: $e')),
+                  );
+                }
+              },
+              child: const Text('Gönder'),
             ),
           ],
-        ),
-      ),
+        );
+      },
     );
   }
-}
 
-class _CompareTile extends StatelessWidget {
-  const _CompareTile({
-    required this.name,
-    required this.pages,
-    required this.streak,
-    required this.color,
-    required this.initials,
-  });
+  Future<void> _acceptRequest(String senderUid) async {
+    try {
+      await _api.acceptFriendRequest(senderUid);
+      if (!mounted) return;
+      await _load();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    }
+  }
 
-  final String name;
-  final int pages;
-  final int streak;
-  final Color color;
-  final String initials;
+  Future<void> _rejectRequest(String senderUid) async {
+    try {
+      await _api.rejectFriendRequest(senderUid);
+      if (!mounted) return;
+      await _load();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: scheme.outline),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 14,
-                backgroundColor: color,
-                child: Text(
-                  initials,
-                  style: AppTextStyles.caption.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  name,
-                  style: AppTextStyles.bodySmall.copyWith(color: scheme.onSurface, fontWeight: FontWeight.w600),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Sosyal'),
+        actions: [
+          IconButton(
+            tooltip: 'Arkadaş Ekle',
+            onPressed: _showAddFriendDialog,
+            icon: const Icon(Icons.person_add),
           ),
-          const SizedBox(height: 10),
-          Text('$pages sayfa', style: AppTextStyles.h3.copyWith(color: scheme.onSurface)),
-          const SizedBox(height: 2),
-          Text('🔥$streak', style: AppTextStyles.caption.copyWith(color: scheme.onSurface.withValues(alpha: 0.75))),
         ],
       ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                children: [
+                  if (_requests.isNotEmpty) ...[
+                    Text(
+                      'Gelen İstekler',
+                      style: AppTextStyles.h3.copyWith(color: scheme.onSurface),
+                    ),
+                    const SizedBox(height: 12),
+                    ..._requests.map((request) {
+                      final senderUid = request['sender_uid'] as String? ?? '';
+                      final name = request['sender_name'] as String? ?? 'Kullanıcı';
+                      final color = Color(coverColorFromId(senderUid));
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: PPCard(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            children: [
+                              Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 22,
+                                    backgroundColor: color,
+                                    child: Text(
+                                      _initials(name),
+                                      style: AppTextStyles.body.copyWith(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      name,
+                                      style: AppTextStyles.body.copyWith(
+                                        color: scheme.onSurface,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: PPButton(
+                                      label: 'Kabul Et',
+                                      onPressed: () => _acceptRequest(senderUid),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: PPButton(
+                                      label: 'Reddet',
+                                      variant: PPButtonVariant.secondary,
+                                      onPressed: () => _rejectRequest(senderUid),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                    const SizedBox(height: 8),
+                  ],
+                  Text(
+                    'Arkadaşlar',
+                    style: AppTextStyles.h3.copyWith(color: scheme.onSurface),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_friends.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 24),
+                      child: Center(
+                        child: Text(
+                          'Henüz arkadaşın yok',
+                          style: AppTextStyles.body.copyWith(
+                            color: scheme.onSurface.withValues(alpha: 0.7),
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    ..._friends.map((friend) {
+                      final uid = friend['uid'] as String? ?? '';
+                      final name = friend['display_name'] as String? ?? 'Kullanıcı';
+                      final email = friend['email'] as String? ?? '';
+                      final streak = _readInt(friend['current_streak']);
+                      final totalPages = _readInt(friend['total_pages']);
+                      final color = Color(coverColorFromId(uid));
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: PPCard(
+                          padding: const EdgeInsets.all(12),
+                          onTap: () => context.go('/social/$uid'),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 22,
+                                backgroundColor: color,
+                                child: Text(
+                                  _initials(name),
+                                  style: AppTextStyles.body.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      name,
+                                      style: AppTextStyles.body.copyWith(
+                                        color: scheme.onSurface,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    if (email.isNotEmpty) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        email,
+                                        style: AppTextStyles.caption.copyWith(
+                                          color: AppColors.textSecondary,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '🔥 $streak günlük seri • $totalPages sayfa',
+                                      style: AppTextStyles.caption.copyWith(
+                                        color: scheme.onSurface.withValues(alpha: 0.7),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                Icons.chevron_right,
+                                color: scheme.onSurface.withValues(alpha: 0.65),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                ],
+              ),
+            ),
     );
   }
 }
-

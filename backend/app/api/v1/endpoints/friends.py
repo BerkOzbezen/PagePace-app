@@ -1,4 +1,4 @@
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -6,199 +6,175 @@ from pydantic import BaseModel, Field
 from app.core.deps import get_uid
 from app.core.firebase import db
 from app.core.utils import doc_to_dict, utc_now
-from app.services.stats_service import (
-    fetch_all_sessions,
-    friend_weekly_pages,
-    streak_stats,
-)
+from app.services.stats_service import fetch_all_sessions, session_pages, streak_stats
 
 router = APIRouter(prefix="/friends", tags=["friends"])
 
 
-class FriendRequestCreate(BaseModel):
-    to_user_id: str = Field(..., min_length=1)
+class FriendRequest(BaseModel):
+    email: str
 
 
 class FriendRequestAction(BaseModel):
-    action: Literal["accept", "reject"]
+    sender_uid: str = Field(..., min_length=1)
 
 
-def _friendships_ref(db):
-    return db.collection("friendships")
+def _friends_ref(uid: str):
+    return db.collection("users").document(uid).collection("friends")
 
 
-def _find_friendship(db, uid: str, other_uid: str) -> dict[str, Any] | None:
-    for doc in _friendships_ref(db).stream():
-        data = doc.to_dict() or {}
-        from_uid = data.get("fromUid")
-        to_uid = data.get("toUid")
-        if {from_uid, to_uid} == {uid, other_uid}:
-            return {**data, "id": doc.id}
+def _requests_ref(uid: str):
+    return db.collection("users").document(uid).collection("friendRequests")
+
+
+def _user_ref(uid: str):
+    return db.collection("users").document(uid)
+
+
+def _find_user_by_email(email: str):
+    normalized = email.strip().lower()
+    for doc in db.collection("users").where("email", "==", normalized).limit(1).stream():
+        return doc
     return None
 
 
-def _active_friendship(db, uid: str, friend_uid: str) -> dict[str, Any] | None:
-    friendship = _find_friendship(db, uid, friend_uid)
-    if friendship and friendship.get("status") == "active":
-        return friendship
-    return None
+def _user_stats(uid: str) -> dict[str, int]:
+    sessions = fetch_all_sessions(db, uid)
+    streak = streak_stats(sessions)
+    total_pages = sum(session_pages(session) for session in sessions)
+    return {
+        "current_streak": streak["current_streak"],
+        "total_pages": total_pages,
+    }
 
 
-def _friend_uid_from(friendship: dict[str, Any], uid: str) -> str:
-    if friendship.get("fromUid") == uid:
-        return friendship["toUid"]
-    return friendship["fromUid"]
+def _friend_payload(friend_uid: str) -> dict[str, Any]:
+    user_doc = _user_ref(friend_uid).get()
+    user_data = user_doc.to_dict() or {} if user_doc.exists else {}
+    stats = _user_stats(friend_uid)
+    return {
+        "uid": friend_uid,
+        "display_name": user_data.get("displayName"),
+        "email": user_data.get("email"),
+        "current_streak": stats["current_streak"],
+        "total_pages": stats["total_pages"],
+    }
+
+
+@router.get("")
+async def list_friends(uid: Annotated[str, Depends(get_uid)]):
+    friends = [
+        _friend_payload(doc.id)
+        for doc in _friends_ref(uid).stream()
+    ]
+    return {"friends": friends}
 
 
 @router.post("/request", status_code=status.HTTP_201_CREATED)
 async def send_friend_request(
-    body: FriendRequestCreate,
+    body: FriendRequest,
     uid: Annotated[str, Depends(get_uid)],
 ):
-    if body.to_user_id == uid:
+    target_email = body.email.strip().lower()
+    target_doc = _find_user_by_email(target_email)
+    if target_doc is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bu e-posta ile kayıtlı kullanıcı bulunamadı",
+        )
+
+    target_uid = target_doc.id
+    if target_uid == uid:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Kendinize arkadaşlık isteği gönderemezsiniz",
         )
 
-    target = db.collection("users").document(body.to_user_id).get()
-    if not target.exists:
+    if _friends_ref(uid).document(target_uid).get().exists:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Kullanıcı bulunamadı"
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Bu kullanıcı zaten arkadaşınız",
         )
 
-    existing = _find_friendship(db, uid, body.to_user_id)
-    if existing:
-        status_value = existing.get("status")
-        if status_value == "active":
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Bu kullanıcı zaten arkadaşınız",
-            )
-        if status_value == "pending":
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Bekleyen arkadaşlık isteği zaten var",
-            )
+    if _requests_ref(target_uid).document(uid).get().exists:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Bekleyen arkadaşlık isteği zaten var",
+        )
+
+    sender_doc = _user_ref(uid).get()
+    sender_data = sender_doc.to_dict() or {} if sender_doc.exists else {}
 
     payload = {
-        "fromUid": uid,
-        "toUid": body.to_user_id,
         "status": "pending",
+        "senderUid": uid,
+        "senderEmail": sender_data.get("email") or target_email,
+        "senderName": sender_data.get("displayName") or sender_data.get("email") or "Kullanıcı",
         "createdAt": utc_now(),
     }
-    _, ref = _friendships_ref(db).add(payload)
-    return {"id": ref.id, "status": "pending"}
+    _requests_ref(target_uid).document(uid).set(payload)
+    return {"status": "pending", "target_uid": target_uid}
 
 
-@router.put("/request/{friendship_id}")
-async def respond_friend_request(
-    friendship_id: str,
+@router.get("/requests")
+async def list_friend_requests(uid: Annotated[str, Depends(get_uid)]):
+    requests: list[dict[str, Any]] = []
+    for doc in _requests_ref(uid).stream():
+        data = doc_to_dict(doc)
+        if data.get("status") != "pending":
+            continue
+        requests.append(
+            {
+                "sender_uid": doc.id,
+                "sender_name": data.get("senderName"),
+                "sender_email": data.get("senderEmail"),
+                "status": data.get("status"),
+                "created_at": data.get("createdAt"),
+            }
+        )
+    return {"requests": requests}
+
+
+@router.post("/accept")
+async def accept_friend_request(
     body: FriendRequestAction,
     uid: Annotated[str, Depends(get_uid)],
 ):
-    ref = _friendships_ref(db).document(friendship_id)
-    doc = ref.get()
-    if not doc.exists:
+    sender_uid = body.sender_uid
+    request_ref = _requests_ref(uid).document(sender_uid)
+    request_doc = request_ref.get()
+    if not request_doc.exists:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="İstek bulunamadı"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Arkadaşlık isteği bulunamadı",
         )
 
-    data = doc.to_dict() or {}
-    if data.get("toUid") != uid:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Bu isteği yanıtlama yetkiniz yok",
-        )
+    data = request_doc.to_dict() or {}
     if data.get("status") != "pending":
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="İstek artık beklemede değil",
         )
 
-    new_status = "active" if body.action == "accept" else "rejected"
-    ref.update({"status": new_status})
-    return {"id": friendship_id, "status": new_status}
+    now = utc_now()
+    request_ref.update({"status": "accepted", "acceptedAt": now})
+
+    _friends_ref(uid).document(sender_uid).set({"addedAt": now})
+    _friends_ref(sender_uid).document(uid).set({"addedAt": now})
+
+    return {"status": "accepted", "sender_uid": sender_uid}
 
 
-@router.get("")
-async def list_friends(uid: Annotated[str, Depends(get_uid)]):
-    friends: list[dict[str, Any]] = []
-
-    for doc in _friendships_ref(db).stream():
-        data = doc.to_dict() or {}
-        if data.get("status") != "active":
-            continue
-        if uid not in (data.get("fromUid"), data.get("toUid")):
-            continue
-
-        friend_uid = _friend_uid_from(data, uid)
-        user_doc = db.collection("users").document(friend_uid).get()
-        user_data = user_doc.to_dict() or {} if user_doc.exists else {}
-        friends.append(
-            {
-                "friendship_id": doc.id,
-                "uid": friend_uid,
-                "display_name": user_data.get("displayName"),
-                "avatar_url": user_data.get("avatarUrl"),
-            }
-        )
-
-    return {"friends": friends}
-
-
-@router.delete("/{friendship_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def remove_friend(
-    friendship_id: str,
+@router.post("/reject")
+async def reject_friend_request(
+    body: FriendRequestAction,
     uid: Annotated[str, Depends(get_uid)],
 ):
-    ref = _friendships_ref(db).document(friendship_id)
-    doc = ref.get()
-    if not doc.exists:
+    request_ref = _requests_ref(uid).document(body.sender_uid)
+    if not request_ref.get().exists:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Arkadaşlık bulunamadı"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Arkadaşlık isteği bulunamadı",
         )
-
-    data = doc.to_dict() or {}
-    if uid not in (data.get("fromUid"), data.get("toUid")):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Bu arkadaşlığı silme yetkiniz yok",
-        )
-    ref.delete()
-
-
-@router.get("/{friend_uid}/stats")
-async def get_friend_stats(
-    friend_uid: str,
-    uid: Annotated[str, Depends(get_uid)],
-):
-    friendship = _active_friendship(db, uid, friend_uid)
-    if not friendship:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Bu kullanıcının istatistiklerini görüntüleme yetkiniz yok",
-        )
-
-    friend_doc = db.collection("users").document(friend_uid).get()
-    if not friend_doc.exists:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Kullanıcı bulunamadı"
-        )
-    friend_data = friend_doc.to_dict() or {}
-    if friend_data.get("isProfileHidden"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Bu profil gizli",
-        )
-
-    sessions = fetch_all_sessions(db, friend_uid)
-    books_ref = db.collection("users").document(friend_uid).collection("books")
-    total_books = sum(1 for _ in books_ref.stream())
-    streak = streak_stats(sessions)
-
-    return {
-        "weekly_pages": friend_weekly_pages(sessions),
-        "current_streak": streak["current_streak"],
-        "total_books": total_books,
-    }
+    request_ref.delete()
+    return {"status": "rejected", "sender_uid": body.sender_uid}

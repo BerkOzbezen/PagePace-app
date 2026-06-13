@@ -1,7 +1,7 @@
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.core.deps import get_uid
 from app.core.firebase import db
@@ -12,6 +12,11 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 class PrivacyUpdate(BaseModel):
     is_profile_hidden: bool
+
+
+class ProfileCreate(BaseModel):
+    display_name: str = Field(..., min_length=1)
+    email: str = Field(..., min_length=1)
 
 
 def _user_ref(db, uid: str):
@@ -32,6 +37,23 @@ def _get_user_or_404(db, uid: str) -> dict[str, Any]:
 @router.get("/me")
 async def get_me(uid: Annotated[str, Depends(get_uid)]):
     return user_to_api(_get_user_or_404(db, uid))
+
+
+@router.post("/profile", status_code=status.HTTP_201_CREATED)
+async def create_profile(
+    body: ProfileCreate,
+    uid: Annotated[str, Depends(get_uid)],
+):
+    ref = _user_ref(db, uid)
+    payload: dict[str, Any] = {
+        "displayName": body.display_name.strip(),
+        "email": body.email.strip().lower(),
+        "updatedAt": utc_now(),
+    }
+    if not ref.get().exists:
+        payload["createdAt"] = utc_now()
+    ref.set(payload, merge=True)
+    return user_to_api({**payload, "uid": uid})
 
 
 @router.get("/search")

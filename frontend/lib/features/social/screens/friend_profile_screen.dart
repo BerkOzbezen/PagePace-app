@@ -6,8 +6,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/utils/book_mapper.dart';
 import '../../../shared/widgets/pp_card.dart';
-import 'social_screen.dart';
 
 class FriendProfileScreen extends StatelessWidget {
   const FriendProfileScreen({super.key, required this.friendId});
@@ -24,19 +24,13 @@ class FriendProfileScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-
-    final friend = mockFriends.cast<Map<String, Object?>>().firstWhere(
-          (f) => f['id'] == friendId,
-          orElse: () => const {},
-        );
-
-    final name = (friend['name'] as String?) ?? 'Arkadaş';
-    final weeklyPages = (friend['weeklyPages'] as int?) ?? 0;
-    final streak = (friend['streak'] as int?) ?? 0;
-    final totalBooks = (friend['totalBooks'] as int?) ?? 0;
-    final avatarColor = Color((friend['avatarColor'] as int?) ?? 0xFF6C63FF);
-
-    // Mock extras for profile
+    const name = 'Arkadaş';
+    const weeklyPages = 0;
+    const streak = 0;
+    const totalBooks = 0;
+    const myWeeklyPages = 0;
+    const myStreak = 0;
+    final avatarColor = Color(coverColorFromId(friendId));
     final totalHours = max(10, (weeklyPages / 12).round() + 18);
 
     return Scaffold(
@@ -227,4 +221,3 @@ class _LegendDot extends StatelessWidget {
     );
   }
 }
-
