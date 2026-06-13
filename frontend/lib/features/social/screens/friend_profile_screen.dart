@@ -24,11 +24,31 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
 
   String _name = 'Arkadaş';
   bool _loading = true;
+  int _weeklyPages = 0;
+  int _streak = 0;
+  int _totalBooks = 0;
+  int _totalPages = 0;
+  int _myWeeklyPages = 0;
+  int _myStreak = 0;
 
   @override
   void initState() {
     super.initState();
     _loadFriend();
+  }
+
+  int _readInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return 0;
+  }
+
+  int _sumWeeklyPages(List<Map<String, dynamic>> weekly) {
+    var total = 0;
+    for (final day in weekly) {
+      total += _readInt(day['pages_read']);
+    }
+    return total;
   }
 
   String _resolveName(Map<String, dynamic>? friend) {
@@ -46,7 +66,17 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
 
   Future<void> _loadFriend() async {
     try {
-      final friends = await _api.getFriends();
+      final results = await Future.wait([
+        _api.getFriends(),
+        _api.getStreakStats(),
+        _api.getYearlyStats(),
+        _api.getWeeklyStats(),
+      ]);
+      final friends = results[0] as List<Map<String, dynamic>>;
+      final streakStats = results[1] as Map<String, dynamic>;
+      final yearlyStats = results[2] as Map<String, dynamic>;
+      final weeklyStats = results[3] as List<Map<String, dynamic>>;
+
       Map<String, dynamic>? match;
       for (final friend in friends) {
         if (friend['uid'] == widget.friendId) {
@@ -54,9 +84,22 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
           break;
         }
       }
+
       if (!mounted) return;
       setState(() {
         _name = _resolveName(match);
+        if (match != null) {
+          _weeklyPages = _readInt(match['weekly_pages'] ?? match['total_pages']);
+          _streak = _readInt(match['current_streak']);
+          _totalPages = _readInt(match['total_pages']);
+          _totalBooks = _readInt(match['total_books']);
+        }
+        _myStreak = _readInt(streakStats['current_streak']);
+        final weeklyFromYearly = (_readInt(yearlyStats['avg_pages_per_day']) * 7).round();
+        _myWeeklyPages = _sumWeeklyPages(weeklyStats).clamp(0, 999999);
+        if (_myWeeklyPages == 0 && weeklyFromYearly > 0) {
+          _myWeeklyPages = weeklyFromYearly;
+        }
         _loading = false;
       });
     } catch (_) {
@@ -75,13 +118,8 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    const weeklyPages = 0;
-    const streak = 0;
-    const totalBooks = 0;
-    const myWeeklyPages = 0;
-    const myStreak = 0;
     final avatarColor = Color(coverColorFromId(widget.friendId));
-    final totalHours = max(10, (weeklyPages / 12).round() + 18);
+    final totalHours = _totalPages <= 0 ? 0 : (_totalPages / 40).round();
 
     return Scaffold(
       appBar: AppBar(
@@ -113,7 +151,7 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
                   Text(_name, style: AppTextStyles.h2.copyWith(color: scheme.onSurface)),
                   const SizedBox(height: 6),
                   Text(
-                    '$totalBooks kitap okudu',
+                    '$_totalBooks kitap okudu',
                     style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
                   ),
                   const SizedBox(height: 16),
@@ -126,9 +164,9 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
                       crossAxisSpacing: 12,
                       childAspectRatio: 2.2,
                       children: [
-                        _StatCell(icon: Icons.menu_book_outlined, value: '$weeklyPages', label: 'Haftalık Sayfa'),
-                        _StatCell(icon: Icons.local_fire_department_outlined, value: '$streak', label: 'Streak'),
-                        _StatCell(icon: Icons.library_books_outlined, value: '$totalBooks', label: 'Toplam Kitap'),
+                        _StatCell(icon: Icons.menu_book_outlined, value: '$_weeklyPages', label: 'Haftalık Sayfa'),
+                        _StatCell(icon: Icons.local_fire_department_outlined, value: '$_streak', label: 'Streak'),
+                        _StatCell(icon: Icons.library_books_outlined, value: '$_totalBooks', label: 'Toplam Kitap'),
                         _StatCell(icon: Icons.timer_outlined, value: '$totalHours', label: 'Toplam Saat'),
                       ],
                     ),
@@ -144,7 +182,7 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
                           height: 190,
                           child: BarChart(
                             BarChartData(
-                              maxY: max(myWeeklyPages, weeklyPages).toDouble() + 20,
+                              maxY: max(_myWeeklyPages, _weeklyPages).toDouble() + 20,
                               gridData: FlGridData(
                                 show: true,
                                 drawVerticalLine: false,
@@ -181,16 +219,16 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
                                   x: 0,
                                   barsSpace: 8,
                                   barRods: [
-                                    BarChartRodData(toY: myWeeklyPages.toDouble(), width: 14, borderRadius: BorderRadius.circular(6), color: AppColors.primary),
-                                    BarChartRodData(toY: weeklyPages.toDouble(), width: 14, borderRadius: BorderRadius.circular(6), color: AppColors.warning),
+                                    BarChartRodData(toY: _myWeeklyPages.toDouble(), width: 14, borderRadius: BorderRadius.circular(6), color: AppColors.primary),
+                                    BarChartRodData(toY: _weeklyPages.toDouble(), width: 14, borderRadius: BorderRadius.circular(6), color: AppColors.warning),
                                   ],
                                 ),
                                 BarChartGroupData(
                                   x: 1,
                                   barsSpace: 8,
                                   barRods: [
-                                    BarChartRodData(toY: myStreak.toDouble(), width: 14, borderRadius: BorderRadius.circular(6), color: AppColors.primary),
-                                    BarChartRodData(toY: streak.toDouble(), width: 14, borderRadius: BorderRadius.circular(6), color: AppColors.warning),
+                                    BarChartRodData(toY: _myStreak.toDouble(), width: 14, borderRadius: BorderRadius.circular(6), color: AppColors.primary),
+                                    BarChartRodData(toY: _streak.toDouble(), width: 14, borderRadius: BorderRadius.circular(6), color: AppColors.warning),
                                   ],
                                 ),
                               ],
