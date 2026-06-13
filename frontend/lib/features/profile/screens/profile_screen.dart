@@ -19,7 +19,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _api = ApiService();
 
   bool _loading = true;
-  bool _hidden = false;
   String _displayName = '';
   String _email = '';
   String _initials = '?';
@@ -162,27 +161,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       _StatChip(value: '$_totalBooks', label: 'Kitap'),
                       _StatChip(value: '$_totalHours', label: 'Saat'),
                       _StatChip(value: '$_currentStreak', label: 'Gün Seri'),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                PPCard(
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Profili Gizle',
-                          style: AppTextStyles.body.copyWith(
-                            color: scheme.onSurface,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      Switch(
-                        value: _hidden,
-                        activeColor: AppColors.primary,
-                        onChanged: (v) => setState(() => _hidden = v),
-                      ),
                     ],
                   ),
                 ),
